@@ -7,11 +7,16 @@ whitespace-only extraction guard (scanned-PDF case) and the
 """
 
 import pytest
+import sys
+import types
 
 import lightrag.pipeline as _pipeline
 from lightrag.constants import FULL_DOCS_FORMAT_RAW
 from lightrag.parser.base import ParseContext
-from lightrag.parser.legacy.extractors import LegacyExtractionError
+from lightrag.parser.legacy.extractors import (
+    LegacyExtractionError,
+    _extract_pdf_pypdf,
+)
 from lightrag.parser.legacy.parser import LegacyParser
 
 pytestmark = pytest.mark.offline
@@ -119,3 +124,33 @@ async def test_legacy_parse_passes_pdf_password_from_env(
 
     assert seen == {"suffix": "pdf", "pdf_password": "s3cret"}
     assert result.content == "decrypted text"
+
+
+def test_legacy_pdf_extractor_falls_back_to_pymupdf_when_pypdf_fails(monkeypatch):
+    class _BrokenPdfReader:
+        is_encrypted = False
+
+        def __init__(self, _pdf_file):
+            self.pages = [self]
+
+        def extract_text(self):
+            raise RuntimeError("malformed content stream")
+
+    class _FallbackDoc:
+        page_count = 2
+        needs_pass = False
+
+        def load_page(self, index):
+            return types.SimpleNamespace(get_text=lambda mode: f"page {index} {mode}")
+
+        def close(self):
+            pass
+
+    fake_pypdf = types.SimpleNamespace(PdfReader=_BrokenPdfReader)
+    fake_fitz = types.SimpleNamespace(
+        open=lambda *, stream, filetype: _FallbackDoc(),
+    )
+    monkeypatch.setitem(sys.modules, "pypdf", fake_pypdf)
+    monkeypatch.setitem(sys.modules, "fitz", fake_fitz)
+
+    assert _extract_pdf_pypdf(b"%PDF malformed") == "page 0 text\npage 1 text\n"

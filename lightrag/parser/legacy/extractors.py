@@ -21,21 +21,44 @@ def _extract_pdf_pypdf(file_bytes: bytes, password: str | None = None) -> str:
     from pypdf import PdfReader  # type: ignore
 
     pdf_file = BytesIO(file_bytes)
-    reader = PdfReader(pdf_file)
+    try:
+        reader = PdfReader(pdf_file)
 
-    if reader.is_encrypted:
-        # Try empty password first (covers permission-only encrypted PDFs)
-        decrypt_result = reader.decrypt(password or "")
-        if decrypt_result == 0:
-            if password:
-                raise Exception("Incorrect PDF password")
-            else:
+        if reader.is_encrypted:
+            # Try empty password first (covers permission-only encrypted PDFs)
+            decrypt_result = reader.decrypt(password or "")
+            if decrypt_result == 0:
+                if password:
+                    raise Exception("Incorrect PDF password")
+                else:
+                    raise Exception("PDF is encrypted but no password provided")
+
+        content = ""
+        for page in reader.pages:
+            content += page.extract_text() + "\n"
+        return content
+    except Exception:
+        return _extract_pdf_pymupdf(file_bytes, password)
+
+
+def _extract_pdf_pymupdf(file_bytes: bytes, password: str | None = None) -> str:
+    """Fallback PDF text extraction using PyMuPDF for malformed PDFs."""
+    import fitz  # type: ignore
+
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    try:
+        if getattr(doc, "needs_pass", False):
+            if not doc.authenticate(password or ""):
+                if password:
+                    raise Exception("Incorrect PDF password")
                 raise Exception("PDF is encrypted but no password provided")
 
-    content = ""
-    for page in reader.pages:
-        content += page.extract_text() + "\n"
-    return content
+        content = ""
+        for page_index in range(doc.page_count):
+            content += (doc.load_page(page_index).get_text("text") or "") + "\n"
+        return content
+    finally:
+        doc.close()
 
 
 def _extract_docx(file_bytes: bytes) -> str:
