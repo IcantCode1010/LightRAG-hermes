@@ -136,6 +136,9 @@ async def test_build_latest_snapshot_with_client_activates_after_latest_inserts(
         def __init__(self):
             self.sources: list[str] = []
 
+        async def documents(self):
+            return {"documents": []}
+
         async def insert_text(self, text: str, *, file_source: str | None = None):
             self.sources.append(file_source or "")
             return {"status": "success"}

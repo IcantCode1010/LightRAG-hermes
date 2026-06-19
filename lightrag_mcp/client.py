@@ -42,6 +42,13 @@ class LightRAGClient:
     async def pipeline_status(self) -> dict[str, Any]:
         return await self._request("GET", "/documents/pipeline_status")
 
+    async def documents(self) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            "/documents/paginated",
+            json={"page": 1, "page_size": 10},
+        )
+
     async def query(self, query: str, *, mode: str) -> dict[str, Any]:
         return await self._request(
             "POST",

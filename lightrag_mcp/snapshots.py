@@ -75,6 +75,13 @@ class LatestSnapshotBuilder:
         base_url: str,
         client,
     ) -> SnapshotBuildResult:
+        target_documents = await client.documents()
+        if target_documents.get("documents"):
+            raise RuntimeError(
+                "snapshot endpoint is not empty; rotate or archive the snapshot "
+                "storage before building a new latest-only snapshot"
+            )
+
         latest = self.registry.latest_sources()
         latest_sources = [latest[key] for key in sorted(latest)]
         insert_results: list[dict[str, object]] = []

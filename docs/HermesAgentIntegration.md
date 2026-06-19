@@ -86,6 +86,11 @@ document key into a clean LightRAG snapshot endpoint. The tool activates the
 snapshot only after every latest source has been accepted by that endpoint. If
 any insert fails, the previous `active.json` pointer is left unchanged.
 
+Before inserting, the adapter checks the target snapshot endpoint for existing
+documents. If any are present, `build_latest_snapshot` refuses to run. This
+prevents accidentally mixing a new latest-only generation with a previous
+snapshot. The adapter does not clear or delete snapshot storage.
+
 The target `snapshot_base_url` must point to a fresh or otherwise latest-only
 LightRAG storage workspace. Do not point it at an index that already contains
 historical versions.
