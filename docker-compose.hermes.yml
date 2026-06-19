@@ -1,0 +1,54 @@
+services:
+  lightrag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lightrag-hermes-api:local
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${LIGHTRAG_HOST_BIND:-127.0.0.1}:${PORT:-9621}:9621"
+    volumes:
+      - ./data/rag_storage:/app/data/rag_storage
+      - ./data/inputs:/app/data/inputs
+      - ./data/prompts:/app/data/prompts
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "9621"
+      WORKING_DIR: "/app/data/rag_storage"
+      INPUT_DIR: "/app/data/inputs"
+      PROMPT_DIR: "/app/data/prompts"
+    networks:
+      - hermes-net
+    restart: unless-stopped
+
+  lightrag-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: lightrag-hermes-mcp:local
+    env_file:
+      - path: env.hermes
+        required: false
+    ports:
+      - "${LIGHTRAG_MCP_HOST_BIND:-127.0.0.1}:${LIGHTRAG_MCP_PORT:-8765}:8765"
+    volumes:
+      - ./data/hermes_sources:/app/data/hermes_sources
+      - ./data/hermes_snapshots:/app/data/hermes_snapshots
+    environment:
+      LIGHTRAG_MCP_BASE_URL: "http://lightrag-api:9621"
+      LIGHTRAG_MCP_SOURCE_DIR: "/app/data/hermes_sources"
+      LIGHTRAG_MCP_SNAPSHOT_DIR: "/app/data/hermes_snapshots"
+      LIGHTRAG_MCP_ACTIVE_SNAPSHOT_FILE: "/app/data/hermes_snapshots/active.json"
+      LIGHTRAG_MCP_HOST: "0.0.0.0"
+      LIGHTRAG_MCP_PORT: "8765"
+    depends_on:
+      - lightrag-api
+    networks:
+      - hermes-net
+    restart: unless-stopped
+
+networks:
+  hermes-net:
+    driver: bridge
