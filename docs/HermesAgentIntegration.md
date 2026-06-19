@@ -107,6 +107,19 @@ you intentionally rebuild the active snapshot from scratch, stop the stack first
 and rotate or archive `./data/hermes_snapshot` outside the MCP tools before
 starting a new clean snapshot service.
 
+Use the bundled PowerShell helper to rotate snapshot storage without deleting it:
+
+```powershell
+docker compose -f docker-compose.hermes.yml down
+powershell -ExecutionPolicy Bypass -File scripts\rotate-hermes-snapshot.ps1 -WhatIf
+powershell -ExecutionPolicy Bypass -File scripts\rotate-hermes-snapshot.ps1
+docker compose -f docker-compose.hermes.yml up --build
+```
+
+The helper moves `./data/hermes_snapshot` into
+`./data/hermes_snapshot_archive/hermes_snapshot_<timestamp>` and recreates empty
+`rag_storage` and `inputs` directories.
+
 ## Tools
 
 The initial adapter exposes:
