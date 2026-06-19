@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+WORKDIR /app
+
+ENV UV_SYSTEM_PYTHON=1
+ENV PYTHONUNBUFFERED=1
+
+COPY pyproject.toml setup.py uv.lock ./
+COPY lightrag/ ./lightrag/
+COPY lightrag_mcp/ ./lightrag_mcp/
+
+RUN --mount=type=cache,target=/root/.local/share/uv \
+    uv sync --frozen --no-dev --extra mcp --no-editable
+
+ENV PATH=/app/.venv/bin:$PATH
+ENV LIGHTRAG_MCP_HOST=0.0.0.0
+ENV LIGHTRAG_MCP_PORT=8765
+
+EXPOSE 8765
+
+ENTRYPOINT ["python", "-m", "lightrag_mcp.server"]

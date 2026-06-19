@@ -134,8 +134,13 @@ offline = [
     "lightrag-hku[api,offline-storage,offline-llm]",
 ]
 
+mcp = [
+    "mcp>=1.7.1,<2.0.0",
+    "httpx>=0.28.1",
+]
+
 test = [
-    "lightrag-hku[api]",
+    "lightrag-hku[api,mcp]",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pre-commit",
@@ -168,7 +173,7 @@ Repository = "https://github.com/HKUDS/LightRAG"
 "Bug Tracker" = "https://github.com/HKUDS/LightRAG/issues"
 
 [tool.setuptools.packages.find]
-include = ["lightrag*"]
+include = ["lightrag*", "lightrag_mcp*"]
 exclude = ["data*", "tests*", "scripts*", "examples*", "dickens*", "reproduce*", "output_complete*", "rag_storage*", "inputs*"]
 
 [tool.setuptools]
