@@ -22,6 +22,15 @@ The default host bindings are:
 - LightRAG API/WebUI: `http://127.0.0.1:9621`
 - LightRAG MCP adapter: `http://127.0.0.1:8765`
 
+The Compose stack also starts an internal-only `lightrag-snapshot` service at:
+
+```text
+http://lightrag-snapshot:9621
+```
+
+That service is not published to the host. The MCP adapter uses it as the
+default `build_latest_snapshot` target.
+
 ## Safety Boundary
 
 The MCP adapter runs in a container and talks to LightRAG over the Docker Compose
@@ -30,6 +39,7 @@ network. It mounts only these repo-local data directories:
 ```text
 ./data/hermes_sources
 ./data/hermes_snapshots
+./data/hermes_snapshot
 ```
 
 Do not mount broad home directories into the MCP container. File ingestion should
@@ -79,6 +89,18 @@ any insert fails, the previous `active.json` pointer is left unchanged.
 The target `snapshot_base_url` must point to a fresh or otherwise latest-only
 LightRAG storage workspace. Do not point it at an index that already contains
 historical versions.
+
+The bundled `lightrag-snapshot` service uses separate repo-local storage under:
+
+```text
+./data/hermes_snapshot/rag_storage
+./data/hermes_snapshot/inputs
+```
+
+To preserve latest-only search, use that service as a clean snapshot target. If
+you intentionally rebuild the active snapshot from scratch, stop the stack first
+and rotate or archive `./data/hermes_snapshot` outside the MCP tools before
+starting a new clean snapshot service.
 
 ## Tools
 

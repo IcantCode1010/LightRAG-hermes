@@ -8,6 +8,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class MCPConfig:
     base_url: str
+    snapshot_base_url: str
     api_key: str
     source_dir: Path
     snapshot_dir: Path
@@ -23,6 +24,10 @@ class MCPConfig:
         )
         return cls(
             base_url=os.getenv("LIGHTRAG_MCP_BASE_URL", "http://lightrag-api:9621"),
+            snapshot_base_url=os.getenv(
+                "LIGHTRAG_MCP_SNAPSHOT_BASE_URL",
+                "http://lightrag-snapshot:9621",
+            ),
             api_key=os.getenv("LIGHTRAG_MCP_API_KEY", ""),
             source_dir=Path(
                 os.getenv("LIGHTRAG_MCP_SOURCE_DIR", "/app/data/hermes_sources")

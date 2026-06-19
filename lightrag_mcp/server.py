@@ -205,15 +205,16 @@ async def query_latest_documents(
 @mcp.tool()
 async def build_latest_snapshot(
     snapshot_id: str,
-    snapshot_base_url: str,
+    snapshot_base_url: str | None = None,
 ) -> dict[str, object]:
     """Index latest archived versions into a clean snapshot endpoint and activate it."""
+    target_base_url = snapshot_base_url or config.snapshot_base_url
     return await build_latest_snapshot_with_client(
         registry=SourceRegistry(config.source_dir),
         active_snapshot_file=config.active_snapshot_file,
         snapshot_id=snapshot_id,
-        snapshot_base_url=snapshot_base_url,
-        client=LightRAGClient(snapshot_base_url, config.api_key),
+        snapshot_base_url=target_base_url,
+        client=LightRAGClient(target_base_url, config.api_key),
     )
 
 
