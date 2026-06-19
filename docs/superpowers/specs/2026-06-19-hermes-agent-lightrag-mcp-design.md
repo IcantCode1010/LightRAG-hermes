@@ -9,6 +9,9 @@ Integrate Nous Hermes Agent with LightRAG so Hermes can use LightRAG as a ground
 - Hermes Agent integrates through MCP.
 - The MCP server talks to the running LightRAG REST API rather than importing LightRAG in-process.
 - The MCP server lives in this repository as a companion component, separate from the core `lightrag` package.
+- Local deployment must be Dockerized for host-machine safety.
+- Docker Compose is the deployment boundary for the first implementation.
+- Only required service ports should be published to the host; internal service-to-service traffic should stay on the Compose network.
 - Ingestion supports raw text and local files.
 - Every ingested item requires a caller-provided `document_key`.
 - Every version requires a caller-provided semantic `version_label`.
@@ -32,8 +35,8 @@ The integration uses a small MCP adapter that sits between Hermes Agent and the 
 
 ```text
 Hermes Agent
-  -> LightRAG MCP Server
-    -> LightRAG REST API
+  -> LightRAG MCP Server container
+    -> LightRAG REST API container
       -> LightRAG pipeline, graph, vector, and document-status storage
 ```
 
@@ -56,6 +59,30 @@ docs/
 `client.py` owns the typed REST API client. `versioning.py` owns validation and filename parsing. `snapshots.py` owns latest-version source selection and active snapshot metadata. `server.py` exposes MCP tools and maps MCP inputs to client/snapshot operations.
 
 LightRAG's current API server uses one configured workspace per running instance. Snapshot workspaces therefore cannot be selected per request through the existing API. The first implementation should treat each snapshot as a separately configured LightRAG API instance or add an explicit workspace-management API before attempting dynamic snapshot creation. The MCP server's active snapshot pointer should store the active LightRAG base URL as well as the snapshot identity.
+
+## Docker Deployment Boundary
+
+The first deployable system should use Docker Compose with these services:
+
+```text
+Hermes Agent on host
+  -> lightrag-mcp container
+    -> lightrag-api container for baseline/API health and management
+    -> active lightrag-snapshot-* container for latest-only search
+```
+
+The MCP container owns version validation, source/archive file management, snapshot orchestration, and active snapshot selection. LightRAG containers own parsing, indexing, query execution, and storage.
+
+The Compose setup should provide:
+
+- `lightrag-api`: existing LightRAG API image built from this repo.
+- `lightrag-mcp`: MCP adapter image built from this repo.
+- `lightrag-snapshot-*`: one or more LightRAG API instances with dedicated snapshot storage volumes.
+- An internal Docker network for MCP-to-LightRAG traffic.
+- Host port publishing only for services the user must access directly, such as the main LightRAG UI/API and the MCP transport if Hermes Agent requires a host-accessible endpoint.
+- Mounted data directories for source archive files, snapshot metadata, LightRAG storage, inputs, prompts, and logs.
+
+The MCP adapter must not mount broad host directories. File ingestion should copy explicitly provided files into a controlled source/archive volume before indexing. API keys and model configuration should come from `.env` or Docker secrets, not image layers.
 
 ## Version Identity
 
@@ -203,15 +230,25 @@ Hermes tool call
 The MCP server uses environment variables:
 
 ```text
-LIGHTRAG_MCP_BASE_URL=http://localhost:9621
+LIGHTRAG_MCP_BASE_URL=http://lightrag-api:9621
 LIGHTRAG_MCP_API_KEY=
-LIGHTRAG_MCP_SOURCE_DIR=./hermes_sources
-LIGHTRAG_MCP_SNAPSHOT_DIR=./hermes_snapshots
-LIGHTRAG_MCP_ACTIVE_SNAPSHOT_FILE=./hermes_snapshots/active.json
+LIGHTRAG_MCP_SOURCE_DIR=/app/data/hermes_sources
+LIGHTRAG_MCP_SNAPSHOT_DIR=/app/data/hermes_snapshots
+LIGHTRAG_MCP_ACTIVE_SNAPSHOT_FILE=/app/data/hermes_snapshots/active.json
 LIGHTRAG_MCP_DEFAULT_QUERY_MODE=mix
 ```
 
 The first implementation may use filesystem source/snapshot metadata. It should not require a separate database. `active.json` should include at least the active snapshot ID, active LightRAG query base URL, and the latest `document_key -> version_label` map.
+
+Compose should mount these paths from the repo-local `./data/` tree:
+
+```text
+./data/hermes_sources:/app/data/hermes_sources
+./data/hermes_snapshots:/app/data/hermes_snapshots
+./data/rag_storage:/app/data/rag_storage
+./data/inputs:/app/data/inputs
+./data/prompts:/app/data/prompts
+```
 
 ## Error Handling
 
@@ -236,6 +273,8 @@ Backend tests should cover:
 - MCP tool schemas and non-destructive tool list
 - query behavior when no active snapshot exists
 - failure behavior that preserves the previous active snapshot
+- Docker Compose service configuration
+- container path and environment variable resolution
 
 Integration tests can use a fake LightRAG REST server first. End-to-end tests against a real local LightRAG server can be added after the adapter shape is stable.
 
@@ -245,6 +284,8 @@ Add `docs/HermesAgentIntegration.md` with:
 
 - how to run the LightRAG API server
 - how to run the MCP server
+- how to run the Docker Compose deployment
 - how to configure Hermes Agent to use the MCP server
 - examples for text ingest, file ingest, list documents, and latest-only query
 - explicit note that delete, clear, and historical search are not exposed
+- safety notes for mounted directories, API keys, exposed ports, and snapshot storage cleanup
