@@ -19,6 +19,13 @@ class ActiveSnapshot:
     latest_versions: dict[str, str]
 
 
+@dataclass(frozen=True)
+class SnapshotBuildResult:
+    snapshot: ActiveSnapshot
+    indexed_sources: list[str]
+    insert_results: list[dict[str, object]]
+
+
 class SourceRegistry:
     def __init__(self, source_dir: Path):
         self.source_dir = source_dir
@@ -51,6 +58,51 @@ class SourceRegistry:
 
     def latest_sources(self) -> dict[str, VersionedSource]:
         return latest_by_document_key(self.list_sources())
+
+    def source_path(self, source: VersionedSource) -> Path:
+        return self.source_dir / source.source_name
+
+
+class LatestSnapshotBuilder:
+    def __init__(self, registry: SourceRegistry, active_snapshot_file: Path):
+        self.registry = registry
+        self.active_snapshot_file = active_snapshot_file
+
+    async def build_and_activate(
+        self,
+        *,
+        snapshot_id: str,
+        base_url: str,
+        client,
+    ) -> SnapshotBuildResult:
+        latest = self.registry.latest_sources()
+        latest_sources = [latest[key] for key in sorted(latest)]
+        insert_results: list[dict[str, object]] = []
+        indexed_sources: list[str] = []
+
+        for source in latest_sources:
+            source_path = self.registry.source_path(source)
+            text = source_path.read_text(encoding="utf-8")
+            insert_result = await client.insert_text(
+                text,
+                file_source=source.source_name,
+            )
+            insert_results.append(dict(insert_result))
+            indexed_sources.append(source.source_name)
+
+        snapshot = ActiveSnapshot(
+            snapshot_id=snapshot_id,
+            base_url=base_url,
+            latest_versions={
+                source.document_key: source.version_label for source in latest_sources
+            },
+        )
+        write_active_snapshot(self.active_snapshot_file, snapshot)
+        return SnapshotBuildResult(
+            snapshot=snapshot,
+            indexed_sources=indexed_sources,
+            insert_results=insert_results,
+        )
 
 
 def write_active_snapshot(path: Path, snapshot: ActiveSnapshot) -> None:

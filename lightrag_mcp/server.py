@@ -6,7 +6,11 @@ from mcp.server.fastmcp import FastMCP
 
 from lightrag_mcp.client import LightRAGClient
 from lightrag_mcp.config import MCPConfig
-from lightrag_mcp.snapshots import SourceRegistry, read_active_snapshot
+from lightrag_mcp.snapshots import (
+    LatestSnapshotBuilder,
+    SourceRegistry,
+    read_active_snapshot,
+)
 from lightrag_mcp.versioning import validate_document_key
 
 
@@ -110,6 +114,30 @@ async def query_latest_all_with_client(
     )
 
 
+async def build_latest_snapshot_with_client(
+    *,
+    registry: SourceRegistry,
+    active_snapshot_file: Path,
+    snapshot_id: str,
+    snapshot_base_url: str,
+    client,
+) -> dict[str, object]:
+    builder = LatestSnapshotBuilder(registry, active_snapshot_file)
+    result = await builder.build_and_activate(
+        snapshot_id=snapshot_id,
+        base_url=snapshot_base_url,
+        client=client,
+    )
+    return {
+        "status": "active",
+        "snapshot_id": result.snapshot.snapshot_id,
+        "base_url": result.snapshot.base_url,
+        "latest_versions": result.snapshot.latest_versions,
+        "indexed_sources": result.indexed_sources,
+        "insert_results": result.insert_results,
+    }
+
+
 @mcp.tool()
 def adapter_status() -> dict[str, str]:
     """Return adapter configuration that is safe to expose to Hermes."""
@@ -171,6 +199,21 @@ async def query_latest_documents(
         mode=mode or config.default_query_mode,
         active_snapshot_file=config.active_snapshot_file,
         api_key=config.api_key,
+    )
+
+
+@mcp.tool()
+async def build_latest_snapshot(
+    snapshot_id: str,
+    snapshot_base_url: str,
+) -> dict[str, object]:
+    """Index latest archived versions into a clean snapshot endpoint and activate it."""
+    return await build_latest_snapshot_with_client(
+        registry=SourceRegistry(config.source_dir),
+        active_snapshot_file=config.active_snapshot_file,
+        snapshot_id=snapshot_id,
+        snapshot_base_url=snapshot_base_url,
+        client=LightRAGClient(snapshot_base_url, config.api_key),
     )
 
 

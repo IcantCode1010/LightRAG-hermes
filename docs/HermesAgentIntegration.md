@@ -71,6 +71,15 @@ That file points the adapter to the LightRAG endpoint that contains only the
 latest versions. Until a latest-only snapshot has been built and activated,
 `query_latest_all` and `query_latest_documents` will refuse to run.
 
+Use `build_latest_snapshot` to index the latest archived version for every
+document key into a clean LightRAG snapshot endpoint. The tool activates the
+snapshot only after every latest source has been accepted by that endpoint. If
+any insert fails, the previous `active.json` pointer is left unchanged.
+
+The target `snapshot_base_url` must point to a fresh or otherwise latest-only
+LightRAG storage workspace. Do not point it at an index that already contains
+historical versions.
+
 ## Tools
 
 The initial adapter exposes:
@@ -79,6 +88,7 @@ The initial adapter exposes:
 - `list_documents`
 - `get_pipeline_status`
 - `ingest_text_version`
+- `build_latest_snapshot`
 - `query_latest_all`
 - `query_latest_documents`
 

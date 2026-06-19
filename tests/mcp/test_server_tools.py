@@ -8,6 +8,7 @@ from lightrag_mcp.server import (
     build_ingest_text_version,
     build_list_documents,
     build_selected_document_query,
+    build_latest_snapshot_with_client,
     query_latest_all_with_client,
 )
 from lightrag_mcp.snapshots import ActiveSnapshot, SourceRegistry, write_active_snapshot
@@ -125,3 +126,35 @@ async def test_query_latest_all_uses_active_snapshot_base_url(tmp_path: Path):
 
     assert seen_url == "http://snapshot-api:9621/query"
     assert result["response"] == "answer"
+
+
+@pytest.mark.asyncio
+async def test_build_latest_snapshot_with_client_activates_after_latest_inserts(
+    tmp_path: Path,
+):
+    class FakeClient:
+        def __init__(self):
+            self.sources: list[str] = []
+
+        async def insert_text(self, text: str, *, file_source: str | None = None):
+            self.sources.append(file_source or "")
+            return {"status": "success"}
+
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_text_version("handbook", "2026-06-19-review", "A", "old")
+    registry.write_text_version("handbook", "2026-07-01-final", "A", "new")
+    active_path = tmp_path / "active.json"
+    client = FakeClient()
+
+    result = await build_latest_snapshot_with_client(
+        registry=registry,
+        active_snapshot_file=active_path,
+        snapshot_id="snapshot_20260701",
+        snapshot_base_url="http://snapshot-api:9621",
+        client=client,
+    )
+
+    assert result["status"] == "active"
+    assert result["snapshot_id"] == "snapshot_20260701"
+    assert result["latest_versions"] == {"handbook": "2026-07-01-final"}
+    assert client.sources == ["handbook@2026-07-01-final.md"]
