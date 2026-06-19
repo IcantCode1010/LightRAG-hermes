@@ -54,6 +54,23 @@ The latest version is selected by sortable `version_label` order. Older versions
 remain in the source archive, but search workflows should target the active
 latest-version snapshot only.
 
+## Ingestion and Query Contract
+
+`ingest_text_version` archives a new version under `./data/hermes_sources` and
+rejects duplicate `{document_key}@{version_label}` files. It does not insert the
+text into the live LightRAG index immediately, because indexing every historical
+version would make old versions searchable.
+
+Latest-only query tools require an active snapshot pointer at:
+
+```text
+./data/hermes_snapshots/active.json
+```
+
+That file points the adapter to the LightRAG endpoint that contains only the
+latest versions. Until a latest-only snapshot has been built and activated,
+`query_latest_all` and `query_latest_documents` will refuse to run.
+
 ## Tools
 
 The initial adapter exposes:
@@ -61,6 +78,9 @@ The initial adapter exposes:
 - `adapter_status`
 - `list_documents`
 - `get_pipeline_status`
+- `ingest_text_version`
+- `query_latest_all`
+- `query_latest_documents`
 
 Document deletion, data clearing, and cache clearing are not exposed.
 

@@ -39,3 +39,24 @@ async def test_query_posts_expected_payload():
     assert seen_json["query"] == "What changed?"
     assert seen_json["mode"] == "mix"
     assert result["response"] == "answer"
+
+
+@pytest.mark.asyncio
+async def test_insert_text_posts_file_source():
+    seen_json = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_json.update(json.loads(request.content))
+        return httpx.Response(200, json={"status": "success", "track_id": "insert-1"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = LightRAGClient("http://lightrag-api:9621", "", http=http)
+        result = await client.insert_text(
+            "Version body",
+            file_source="handbook@2026-07-01-final.md",
+        )
+
+    assert seen_json["text"] == "Version body"
+    assert seen_json["file_source"] == "handbook@2026-07-01-final.md"
+    assert result["track_id"] == "insert-1"

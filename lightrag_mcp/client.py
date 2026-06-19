@@ -49,5 +49,10 @@ class LightRAGClient:
             json={"query": query, "mode": mode, "include_references": True},
         )
 
-    async def insert_text(self, text: str) -> dict[str, Any]:
-        return await self._request("POST", "/documents/text", json={"text": text})
+    async def insert_text(
+        self, text: str, *, file_source: str | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"text": text}
+        if file_source is not None:
+            payload["file_source"] = file_source
+        return await self._request("POST", "/documents/text", json=payload)
