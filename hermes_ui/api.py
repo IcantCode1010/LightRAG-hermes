@@ -1,6 +1,7 @@
 import base64
 from contextlib import asynccontextmanager
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 import json
 from pathlib import Path
 import re
@@ -215,6 +216,7 @@ def create_app(
             ...,
             pattern=r"^\d{4}-\d{2}-\d{2}-[A-Za-z0-9._-]+$",
         ),
+        build_snapshot: bool = Form(False),
         file: UploadFile = File(...),
     ) -> dict[str, Any]:
         content = await file.read()
@@ -231,11 +233,27 @@ def create_app(
                 "content_base64": base64.b64encode(content).decode("ascii"),
             },
         )
-        return {
+        response = {
             **result,
             "searchable": False,
             "next_step": "Build the latest snapshot to process this version.",
         }
+        if build_snapshot:
+            snapshot_id = (
+                f"snapshot-{datetime.now(UTC).strftime('%Y-%m-%d.%H%M%S')}"
+            )
+            try:
+                response["snapshot_build"] = await call_tool(
+                    settings.mcp_url,
+                    "build_latest_snapshot",
+                    {"snapshot_id": snapshot_id},
+                )
+            except RuntimeError as error:
+                response["snapshot_build"] = {
+                    "status": "blocked",
+                    "error": str(error),
+                }
+        return response
 
     @app.post("/api/snapshots/build")
     async def api_build_snapshot(request: SnapshotBuildRequest) -> dict[str, Any]:

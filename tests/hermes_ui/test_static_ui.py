@@ -19,6 +19,8 @@ def test_documents_panel_exposes_file_loader_for_ingest_form() -> None:
     assert "/api/ingest-file" in documents_panel
     assert "FormData" in documents_panel
     assert "file.text()" in documents_panel
+    assert "build_snapshot" in documents_panel
+    assert "Build searchable snapshot after upload" in documents_panel
 
 
 def test_snapshot_panel_exposes_readiness_status() -> None:

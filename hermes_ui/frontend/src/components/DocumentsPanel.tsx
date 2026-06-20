@@ -21,6 +21,7 @@ export function DocumentsPanel({
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [buildSnapshot, setBuildSnapshot] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
   async function ingest(event: FormEvent) {
@@ -28,7 +29,7 @@ export function DocumentsPanel({
     setIsPending(true);
     try {
       const response = selectedFile
-        ? await ingestSelectedFile(selectedFile, documentKey, versionLabel)
+        ? await ingestSelectedFile(selectedFile, documentKey, versionLabel, buildSnapshot)
         : await api<unknown>("/api/ingest", {
             method: "POST",
             body: { document_key: documentKey, version_label: versionLabel, title, text },
@@ -103,6 +104,14 @@ export function DocumentsPanel({
           <span>Text</span>
           <Textarea value={text} onChange={(event) => setText(event.target.value)} rows={8} />
         </label>
+        <label className="inline-option">
+          <input
+            checked={buildSnapshot}
+            onChange={(event) => setBuildSnapshot(event.target.checked)}
+            type="checkbox"
+          />
+          <span>Build searchable snapshot after upload</span>
+        </label>
         <Button disabled={isPending} type="submit">Ingest version</Button>
       </form>
 
@@ -144,10 +153,11 @@ function DocumentRow({ documentRecord }: { documentRecord: DocumentRecord }) {
   );
 }
 
-function ingestSelectedFile(file: File, documentKey: string, versionLabel: string) {
+function ingestSelectedFile(file: File, documentKey: string, versionLabel: string, buildSnapshot: boolean) {
   const formData = new FormData();
   formData.append("document_key", documentKey);
   formData.append("version_label", versionLabel);
+  formData.append("build_snapshot", String(buildSnapshot));
   formData.append("file", file, file.name);
   return apiForm<unknown>("/api/ingest-file", formData);
 }

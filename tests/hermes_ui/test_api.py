@@ -174,6 +174,43 @@ def test_ingest_file_rejects_tiny_pdf(tmp_path):
     assert "PDF is too small" in response.json()["detail"]
 
 
+def test_ingest_file_can_trigger_snapshot_build(tmp_path, monkeypatch):
+    calls = []
+
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        calls.append((tool_name, args))
+        if tool_name == "ingest_file_version":
+            return {"status": "stored", "source_name": "manual@2026-06-20-001.pdf"}
+        return {
+            "status": "active",
+            "indexed_sources": ["manual@2026-06-20-001.pdf"],
+        }
+
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/ingest-file",
+        data={
+            "document_key": "manual",
+            "version_label": "2026-06-20-001",
+            "build_snapshot": "true",
+        },
+        files={
+            "file": (
+                "manual.pdf",
+                b"%PDF-1.4\n" + b"x" * 2048,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls[0][0] == "ingest_file_version"
+    assert calls[1][0] == "build_latest_snapshot"
+    assert response.json()["snapshot_build"]["status"] == "active"
+
+
 def _decode_prompt_payload(prompt: str) -> dict:
     start_marker = "```base64\n"
     end_marker = "\n```"
