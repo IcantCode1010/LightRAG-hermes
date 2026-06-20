@@ -70,6 +70,15 @@ def normalize_status(adapter: dict[str, Any], pipeline: dict[str, Any]) -> dict[
     }
 
 
+def normalize_document_processing_status(payload: dict[str, Any]) -> dict[str, Any]:
+    summary = _value(payload, "summary", {})
+    documents = _value(payload, "documents", [])
+    return {
+        "summary": dict(summary) if isinstance(summary, dict) else {},
+        "documents": documents if isinstance(documents, list) else [],
+    }
+
+
 def normalize_snapshot_status(payload: dict[str, Any]) -> dict[str, Any]:
     active_snapshot = _value(payload, "active_snapshot")
     normalized_active = None

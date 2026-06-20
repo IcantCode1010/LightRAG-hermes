@@ -96,6 +96,10 @@ def create_app(
     async def api_documents() -> dict[str, Any]:
         return await document_reader(settings.mcp_url)
 
+    @app.get("/api/documents/status")
+    async def api_documents_status() -> dict[str, Any]:
+        return await call_tool(settings.mcp_url, "document_processing_status")
+
     @app.get("/api/snapshots/status")
     async def api_snapshot_status() -> dict[str, Any]:
         return await snapshot_reader(settings.mcp_url)

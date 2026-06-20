@@ -220,6 +220,23 @@ def test_documents_returns_reader_json(tmp_path):
     }
 
 
+def test_documents_status_returns_processing_status(tmp_path, monkeypatch):
+    calls = []
+
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        calls.append((mcp_url, tool_name, args))
+        return {"summary": {"searchable_latest_count": 2}, "documents": []}
+
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+    client = _client(tmp_path)
+
+    response = client.get("/api/documents/status")
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["searchable_latest_count"] == 2
+    assert calls == [("http://mcp.local:8765/mcp", "document_processing_status", None)]
+
+
 def test_chat_no_selected_docs_allows_general_agent_response(tmp_path):
     calls = []
 

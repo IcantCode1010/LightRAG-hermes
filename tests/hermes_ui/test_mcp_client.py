@@ -6,6 +6,7 @@ import pytest
 
 from hermes_ui import mcp_client
 from hermes_ui.mcp_client import (
+    normalize_document_processing_status,
     normalize_documents,
     normalize_snapshot_status,
     normalize_status,
@@ -71,6 +72,29 @@ def test_normalize_documents_preserves_version_searchability_payload() -> None:
 
 def test_normalize_documents_handles_empty_payload() -> None:
     assert normalize_documents({}) == {"documents": []}
+
+
+def test_normalize_document_processing_status_preserves_status_payload() -> None:
+    result = normalize_document_processing_status(
+        {
+            "summary": {"searchable_latest_count": 1, "failed_latest_count": 1},
+            "documents": [
+                {
+                    "document_key": "boeing",
+                    "latest": {
+                        "version_label": "2026-06-20-001",
+                        "state": "failed",
+                        "chunks_count": None,
+                        "error": "extracted no usable text",
+                    },
+                    "versions": [],
+                }
+            ],
+        }
+    )
+
+    assert result["summary"]["failed_latest_count"] == 1
+    assert result["documents"][0]["latest"]["state"] == "failed"
 
 
 def test_normalize_status_redacts_adapter_paths_and_coerces_pipeline_values() -> None:
