@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from hermes_ui.config import HermesUISettings
+from hermes_ui.document_router import route_document_query
 from hermes_ui.hermes_config import ensure_hermes_home
 from hermes_ui.hermes_runner import (
     build_ingest_prompt,
@@ -150,24 +151,30 @@ def create_app(
         else:
             request_document_keys = request.document_keys
         has_indexed_documents = bool(documents.get("documents"))
-        document_related = _message_matches_document_context(
+        route = route_document_query(
             request.message,
             documents,
+            snapshot,
         )
+        if not request_document_keys and route.intent == "latest_documents":
+            request_document_keys = route.document_keys
         if request_document_keys:
             return _normalize_chat_response(
-                _normalize_lightrag_query_response(
-                    await call_tool(
-                        settings.mcp_url,
-                        "query_latest_documents",
-                        {
-                            "question": request.message,
-                            "document_keys": request_document_keys,
-                        },
-                    )
+                _filter_selected_document_response(
+                    _normalize_lightrag_query_response(
+                        await call_tool(
+                            settings.mcp_url,
+                            "query_latest_documents",
+                            {
+                                "question": request.message,
+                                "document_keys": request_document_keys,
+                            },
+                        )
+                    ),
+                    request_document_keys,
                 )
             )
-        if has_indexed_documents and document_related:
+        if route.intent == "latest_all":
             return _normalize_chat_response(
                 _normalize_lightrag_query_response(
                     await call_tool(
@@ -183,7 +190,7 @@ def create_app(
             has_indexed_documents=has_indexed_documents,
             soul=_read_soul(settings),
             document_state=_build_document_state_digest(documents, snapshot),
-            document_related=document_related,
+            document_related=route.intent != "general",
         )
         return _normalize_chat_response(await hermes_runner(prompt, settings))
 
@@ -774,6 +781,31 @@ def _normalize_lightrag_query_response(response: dict[str, Any]) -> dict[str, An
     if "references" in response:
         normalized["references"] = response["references"]
     return normalized
+
+
+def _filter_selected_document_response(
+    response: dict[str, Any],
+    document_keys: list[str],
+) -> dict[str, Any]:
+    references = response.get("references")
+    if not isinstance(references, list):
+        return response
+
+    allowed_prefixes = tuple(f"{key}@" for key in document_keys)
+    filtered = []
+    for reference in references:
+        if not isinstance(reference, dict):
+            continue
+        file_path = str(reference.get("file_path") or "")
+        if file_path.startswith(allowed_prefixes):
+            filtered.append(reference)
+
+    if filtered:
+        return {**response, "references": filtered}
+    return {
+        "state": "ok",
+        "text": "I could not find a grounded answer in the selected latest document.",
+    }
 
 
 app = create_app()

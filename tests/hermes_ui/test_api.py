@@ -371,10 +371,151 @@ def test_chat_routes_registered_document_content_terms_to_lightrag(
     assert tool_calls == [
         (
             "http://mcp.local:8765/mcp",
-            "query_latest_all",
-            {"question": "What are the primary flight control components?"},
+            "query_latest_documents",
+            {
+                "question": "What are the primary flight control components?",
+                "document_keys": ["15-flight-controls"],
+            },
         )
     ]
+
+
+def test_chat_smart_router_selects_matching_document_for_query(
+    tmp_path, monkeypatch
+):
+    calls = []
+    tool_calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "should not be used"}
+
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        tool_calls.append((mcp_url, tool_name, args))
+        return {"response": "boeing grounded answer"}
+
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "boeing-b737-700-800-900-operations-manual",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+                {
+                    "document_key": "15-flight-controls",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "current",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-003",
+                "latest_versions": {
+                    "boeing-b737-700-800-900-operations-manual": "2026-06-20-001",
+                    "15-flight-controls": "2026-06-20-001",
+                },
+            },
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "What does the boeing b737 manual say about takeoff?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "ok", "text": "boeing grounded answer"}
+    assert calls == []
+    assert tool_calls == [
+        (
+            "http://mcp.local:8765/mcp",
+            "query_latest_documents",
+            {
+                "question": "What does the boeing b737 manual say about takeoff?",
+                "document_keys": ["boeing-b737-700-800-900-operations-manual"],
+            },
+        )
+    ]
+
+
+def test_chat_selected_document_removes_out_of_scope_references(
+    tmp_path, monkeypatch
+):
+    async def hermes_runner(prompt, settings):
+        return {"state": "ok", "text": "should not be used"}
+
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        return {
+            "response": "I do not have enough information in the selected document.",
+            "references": [
+                {
+                    "reference_id": "1",
+                    "file_path": "15-flight-controls@2026-06-20-001.pdf",
+                    "content": None,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "boeing-b737-700-800-900-operations-manual",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+                {
+                    "document_key": "15-flight-controls",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "current",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-003",
+                "latest_versions": {
+                    "boeing-b737-700-800-900-operations-manual": "2026-06-20-001",
+                    "15-flight-controls": "2026-06-20-001",
+                },
+            },
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "What does the boeing b737 manual say about takeoff?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "state": "ok",
+        "text": "I could not find a grounded answer in the selected latest document.",
+    }
 
 
 def test_chat_prompt_includes_compact_document_state_digest(tmp_path):
