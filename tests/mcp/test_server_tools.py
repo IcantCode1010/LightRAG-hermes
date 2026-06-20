@@ -5,6 +5,7 @@ import pytest
 
 from lightrag_mcp.server import (
     build_adapter_status,
+    build_ingest_file_version,
     build_ingest_text_version,
     build_list_documents,
     build_selected_document_query,
@@ -55,6 +56,44 @@ def test_build_ingest_text_version_archives_without_indexing(tmp_path: Path):
     assert result["version_label"] == "2026-07-01-final"
     assert result["indexed"] is False
     assert (tmp_path / "handbook@2026-07-01-final.md").exists()
+
+
+def test_build_ingest_file_version_archives_without_indexing(tmp_path: Path):
+    registry = SourceRegistry(tmp_path)
+
+    result = build_ingest_file_version(
+        registry,
+        document_key="contract",
+        version_label="2026-07-01-final",
+        filename="contract.pdf",
+        content_base64="JVBERi0xLjQK",
+    )
+
+    assert result["document_key"] == "contract"
+    assert result["version_label"] == "2026-07-01-final"
+    assert result["indexed"] is False
+    assert result["source_name"] == "contract@2026-07-01-final.pdf"
+    assert (tmp_path / "contract@2026-07-01-final.pdf").read_bytes() == b"%PDF-1.4\n"
+
+
+def test_build_ingest_file_version_rejects_duplicate_version(tmp_path: Path):
+    registry = SourceRegistry(tmp_path)
+    build_ingest_file_version(
+        registry,
+        document_key="contract",
+        version_label="2026-07-01-final",
+        filename="contract.pdf",
+        content_base64="b25l",
+    )
+
+    with pytest.raises(ValueError, match="document version already exists"):
+        build_ingest_file_version(
+            registry,
+            document_key="contract",
+            version_label="2026-07-01-final",
+            filename="contract.pdf",
+            content_base64="dHdv",
+        )
 
 
 def test_build_selected_document_query_uses_latest_versions(tmp_path: Path):
@@ -141,6 +180,10 @@ async def test_build_latest_snapshot_with_client_activates_after_latest_inserts(
 
         async def insert_text(self, text: str, *, file_source: str | None = None):
             self.sources.append(file_source or "")
+            return {"status": "success"}
+
+        async def insert_file(self, path, *, file_source: str | None = None):
+            self.sources.append(file_source or path.name)
             return {"status": "success"}
 
     registry = SourceRegistry(tmp_path / "sources")

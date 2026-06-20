@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
 
 import httpx
 
@@ -63,3 +64,11 @@ class LightRAGClient:
         if file_source is not None:
             payload["file_source"] = file_source
         return await self._request("POST", "/documents/text", json=payload)
+
+    async def insert_file(
+        self, path: Path, *, file_source: str | None = None
+    ) -> dict[str, Any]:
+        upload_name = file_source or path.name
+        with path.open("rb") as handle:
+            files = {"file": (upload_name, handle, "application/octet-stream")}
+            return await self._request("POST", "/documents/upload", files=files)

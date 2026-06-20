@@ -1,6 +1,7 @@
 const state = {
   documents: [],
   pending: Object.create(null),
+  selectedFile: null,
 };
 
 const elements = {
@@ -30,7 +31,7 @@ for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => selectTab(tab.dataset.tab));
 }
 
-elements.versionLabel.value = `v${datePart()}.001`;
+elements.versionLabel.value = `${datePart()}-001`;
 elements.snapshotId.value = `snapshot-${datePart()}.001`;
 
 renderStatus();
@@ -83,14 +84,17 @@ async function ingestDocument(event) {
     document_key: formValue(elements.ingestForm, "document_key"),
     version_label: formValue(elements.ingestForm, "version_label"),
     title: formValue(elements.ingestForm, "title"),
-    text: elements.ingestForm.elements.text.value,
+    text: elements.ingestForm.elements.text.value.trim(),
   };
 
   await withPending("ingest", [elements.ingestForm.querySelector("button")], async () => {
     try {
-      const response = await api("/api/ingest", { method: "POST", body });
+      const response = state.selectedFile
+        ? await ingestSelectedFile(body)
+        : await api("/api/ingest", { method: "POST", body });
       addMessage("agent", responseText(response, "Ingest request completed."));
       elements.versionLabel.value = nextPatchLabel(body.version_label);
+      clearSelectedFile();
       await refresh();
     } catch (error) {
       addMessage("system", formatError(error));
@@ -101,24 +105,40 @@ async function ingestDocument(event) {
 async function loadDocumentFile(event) {
   const [file] = event.target.files || [];
   if (!file) {
+    clearSelectedFile();
     return;
   }
 
   try {
-    const text = await readTextFile(file);
+    state.selectedFile = file;
     if (!formValue(elements.ingestForm, "document_key")) {
       elements.ingestForm.elements.document_key.value = documentKeyFromFilename(file.name);
     }
     if (!formValue(elements.ingestForm, "title")) {
       elements.ingestForm.elements.title.value = titleFromFilename(file.name);
     }
-    elements.ingestForm.elements.text.value = text;
-    addMessage("system", `Loaded ${file.name}. Review the fields, then ingest this version.`);
+    if (isTextLikeFile(file)) {
+      elements.ingestForm.elements.text.value = await readTextFile(file);
+    } else {
+      elements.ingestForm.elements.text.value = `Attached file: ${file.name}`;
+    }
+    addMessage("system", `Selected ${file.name}. Review the fields, then ingest this version.`);
   } catch (error) {
+    clearSelectedFile();
     addMessage("system", formatError(error));
-  } finally {
-    event.target.value = "";
   }
+}
+
+async function ingestSelectedFile(body) {
+  if (!state.selectedFile) {
+    throw new Error("No file selected.");
+  }
+
+  const formData = new FormData();
+  formData.append("document_key", body.document_key);
+  formData.append("version_label", body.version_label);
+  formData.append("file", state.selectedFile, state.selectedFile.name);
+  return apiForm("/api/ingest-file", formData);
 }
 
 async function buildSnapshot(event) {
@@ -162,6 +182,27 @@ async function api(path, options = {}) {
     return {};
   }
   return payload;
+}
+
+async function apiForm(path, formData) {
+  let response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      body: formData,
+    });
+  } catch (error) {
+    throw new Error(`Request failed for ${path}: ${error.message}`);
+  }
+
+  const text = await response.text();
+  const payload = parseJson(text);
+
+  if (!response.ok) {
+    throw new Error(errorMessage(path, response.status, payload, text));
+  }
+
+  return payload === null ? {} : payload;
 }
 
 function renderStatus(status = null) {
@@ -377,6 +418,19 @@ function readTextFile(file) {
   });
 }
 
+function clearSelectedFile() {
+  state.selectedFile = null;
+  elements.documentFile.value = "";
+}
+
+function isTextLikeFile(file) {
+  const name = file.name.toLowerCase();
+  if (file.type && file.type.startsWith("text/")) {
+    return true;
+  }
+  return [".md", ".markdown", ".txt", ".csv", ".json", ".log"].some((ext) => name.endsWith(ext));
+}
+
 function documentKeyFromFilename(filename) {
   const stem = filename.replace(/\.[^.]+$/, "");
   const key = stem
@@ -395,17 +449,17 @@ function datePart() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  return `${year}.${month}.${day}`;
+  return `${year}-${month}-${day}`;
 }
 
 function nextPatchLabel(label) {
-  const match = /^v(\d{4}\.\d{2}\.\d{2})\.(\d{3})$/.exec(label);
+  const match = /^(\d{4}-\d{2}-\d{2})-(\d{3})$/.exec(label);
   if (!match) {
-    return `v${datePart()}.001`;
+    return `${datePart()}-001`;
   }
 
   const next = String(Number(match[2]) + 1).padStart(3, "0");
-  return `v${match[1]}.${next}`;
+  return `${match[1]}-${next}`;
 }
 
 function isObject(value) {

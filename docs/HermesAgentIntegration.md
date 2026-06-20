@@ -109,10 +109,16 @@ latest-version snapshot only.
 
 ## Ingestion and Query Contract
 
-`ingest_text_version` archives a new version under `./data/hermes_sources` and
-rejects duplicate `{document_key}@{version_label}` files. It does not insert the
-text into the live LightRAG index immediately, because indexing every historical
-version would make old versions searchable.
+`ingest_text_version` and `ingest_file_version` archive new versions under
+`./data/hermes_sources` and reject duplicate
+`{document_key}@{version_label}` files. They do not insert the content into the
+live LightRAG index immediately, because indexing every historical version would
+make old versions searchable.
+
+Text-like latest sources (`.md`, `.txt`, `.csv`, `.json`, `.log`) are inserted
+through LightRAG text ingestion when a latest snapshot is built. PDF and Office
+latest sources remain as files in the archive and are sent to LightRAG through
+`/documents/upload`, so LightRAG performs the document processing.
 
 Latest-only query tools require an active snapshot pointer at:
 
@@ -170,6 +176,7 @@ The initial adapter exposes:
 - `adapter_status`
 - `list_documents`
 - `get_pipeline_status`
+- `ingest_file_version`
 - `ingest_text_version`
 - `build_latest_snapshot`
 - `query_latest_all`

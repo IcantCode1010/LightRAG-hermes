@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi import File, Form, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ from hermes_ui.hermes_runner import (
     build_snapshot_prompt,
     run_hermes_query,
 )
-from hermes_ui.mcp_client import get_documents, get_status
+from hermes_ui.mcp_client import call_tool, get_documents, get_status
 
 
 HermesRunner = Callable[[str, HermesUISettings], Awaitable[dict[str, Any]]]
@@ -31,7 +32,7 @@ class ChatRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     document_key: str = Field(min_length=1)
-    version_label: str = Field(pattern=r"^v\d{4}\.\d{2}\.\d{2}\.\d{3}$")
+    version_label: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}-[A-Za-z0-9._-]+$")
     title: str = Field(min_length=1)
     text: str = Field(min_length=1)
 
@@ -101,6 +102,31 @@ def create_app(
             text=request.text,
         )
         return await hermes_runner(prompt, settings)
+
+    @app.post("/api/ingest-file")
+    async def api_ingest_file(
+        document_key: str = Form(..., min_length=1),
+        version_label: str = Form(
+            ...,
+            pattern=r"^\d{4}-\d{2}-\d{2}-[A-Za-z0-9._-]+$",
+        ),
+        file: UploadFile = File(...),
+    ) -> dict[str, Any]:
+        content = await file.read()
+        if not file.filename:
+            raise HTTPException(status_code=422, detail="filename is required")
+        if not content:
+            raise HTTPException(status_code=422, detail="file cannot be empty")
+        return await call_tool(
+            settings.mcp_url,
+            "ingest_file_version",
+            {
+                "document_key": document_key,
+                "version_label": version_label,
+                "filename": file.filename,
+                "content_base64": base64.b64encode(content).decode("ascii"),
+            },
+        )
 
     @app.post("/api/snapshots/build")
     async def api_build_snapshot(request: SnapshotBuildRequest) -> dict[str, Any]:

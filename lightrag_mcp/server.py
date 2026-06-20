@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -66,6 +68,39 @@ def build_ingest_text_version(
         "indexed": False,
         "message": (
             "Version archived. It is not searchable until a latest-version "
+            "snapshot is built and activated."
+        ),
+    }
+
+
+def build_ingest_file_version(
+    registry: SourceRegistry,
+    *,
+    document_key: str,
+    version_label: str,
+    filename: str,
+    content_base64: str,
+) -> dict[str, object]:
+    try:
+        content = base64.b64decode(content_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("content_base64 must be valid base64") from error
+
+    source_path = registry.write_file_version(
+        document_key,
+        version_label,
+        filename,
+        content,
+    )
+    return {
+        "status": "stored",
+        "document_key": document_key,
+        "version_label": version_label,
+        "source_name": source_path.name,
+        "source_path": str(source_path),
+        "indexed": False,
+        "message": (
+            "File version archived. It is not searchable until a latest-version "
             "snapshot is built and activated."
         ),
     }
@@ -168,6 +203,23 @@ def ingest_text_version(
         version_label=version_label,
         title=title,
         text=text,
+    )
+
+
+@mcp.tool()
+def ingest_file_version(
+    document_key: str,
+    version_label: str,
+    filename: str,
+    content_base64: str,
+) -> dict[str, object]:
+    """Archive a new file version without deleting or indexing old versions."""
+    return build_ingest_file_version(
+        SourceRegistry(config.source_dir),
+        document_key=document_key,
+        version_label=version_label,
+        filename=filename,
+        content_base64=content_base64,
     )
 
 

@@ -19,6 +19,7 @@ class FakeClient:
         self.fail_on_file_source = fail_on_file_source
         self.existing_documents = existing_documents or []
         self.inserted: list[tuple[str, str]] = []
+        self.uploaded: list[tuple[str, str]] = []
 
     async def documents(self):
         return {"documents": self.existing_documents}
@@ -28,6 +29,13 @@ class FakeClient:
             raise RuntimeError(f"insert failed for {file_source}")
         self.inserted.append((text, file_source or ""))
         return {"status": "success", "track_id": f"track-{len(self.inserted)}"}
+
+    async def insert_file(self, path, *, file_source: str | None = None):
+        source = file_source or path.name
+        if source == self.fail_on_file_source:
+            raise RuntimeError(f"insert failed for {source}")
+        self.uploaded.append((path.name, source))
+        return {"status": "success", "track_id": f"upload-{len(self.uploaded)}"}
 
 
 @pytest.mark.asyncio
@@ -59,6 +67,38 @@ async def test_snapshot_builder_indexes_only_latest_versions(tmp_path):
         "policy@2026-06-20-draft.md",
     ]
     assert read_active_snapshot(active_path) == result.snapshot
+
+
+@pytest.mark.asyncio
+async def test_snapshot_builder_uploads_latest_binary_files(tmp_path):
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_file_version(
+        "contract",
+        "2026-06-19-draft",
+        "contract.pdf",
+        b"%PDF-1.4\nold",
+    )
+    registry.write_file_version(
+        "contract",
+        "2026-07-01-final",
+        "contract.pdf",
+        b"%PDF-1.4\nnew",
+    )
+    active_path = tmp_path / "snapshots" / "active.json"
+    client = FakeClient()
+
+    result = await LatestSnapshotBuilder(registry, active_path).build_and_activate(
+        snapshot_id="snapshot_20260701",
+        base_url="http://lightrag-snapshot:9621",
+        client=client,
+    )
+
+    assert client.inserted == []
+    assert client.uploaded == [
+        ("contract@2026-07-01-final.pdf", "contract@2026-07-01-final.pdf")
+    ]
+    assert result.indexed_sources == ["contract@2026-07-01-final.pdf"]
+    assert result.snapshot.latest_versions == {"contract": "2026-07-01-final"}
 
 
 @pytest.mark.asyncio

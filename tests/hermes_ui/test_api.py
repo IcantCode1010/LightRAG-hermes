@@ -29,6 +29,45 @@ def _client(tmp_path: Path, **kwargs) -> TestClient:
     return TestClient(app)
 
 
+def test_ingest_file_calls_mcp_tool_with_base64_payload(tmp_path, monkeypatch):
+    calls = []
+
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        calls.append((mcp_url, tool_name, args))
+        return {
+            "status": "stored",
+            "source_name": "contract@2026-07-01-final.pdf",
+            "indexed": False,
+        }
+
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/ingest-file",
+        data={
+            "document_key": "contract",
+            "version_label": "2026-07-01-final",
+        },
+        files={"file": ("contract.pdf", b"%PDF-1.4\n", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["source_name"] == "contract@2026-07-01-final.pdf"
+    assert calls == [
+        (
+            "http://mcp.local:8765/mcp",
+            "ingest_file_version",
+            {
+                "document_key": "contract",
+                "version_label": "2026-07-01-final",
+                "filename": "contract.pdf",
+                "content_base64": "JVBERi0xLjQK",
+            },
+        )
+    ]
+
+
 def _decode_prompt_payload(prompt: str) -> dict:
     start_marker = "```base64\n"
     end_marker = "\n```"
@@ -68,9 +107,9 @@ def test_documents_returns_reader_json(tmp_path):
             "documents": [
                 {
                     "document_key": "policy",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [
-                        {"label": "v2026.06.20.001", "searchable": True},
+                        {"label": "2026-06-20-001", "searchable": True},
                     ],
                 },
             ],
@@ -86,9 +125,9 @@ def test_documents_returns_reader_json(tmp_path):
         "documents": [
             {
                 "document_key": "policy",
-                "latest_version_label": "v2026.06.20.001",
+                "latest_version_label": "2026-06-20-001",
                 "versions": [
-                    {"label": "v2026.06.20.001", "searchable": True},
+                    {"label": "2026-06-20-001", "searchable": True},
                 ],
             },
         ],
@@ -174,7 +213,7 @@ def test_chat_no_selected_docs_can_choose_latest_all_when_docs_exist(tmp_path):
             "documents": [
                 {
                     "document_key": "policy",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [],
                 }
             ]
@@ -205,12 +244,12 @@ def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_pa
             "documents": [
                 {
                     "document_key": "policy",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [],
                 },
                 {
                     "document_key": "guide",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [],
                 },
             ]
@@ -252,7 +291,7 @@ def test_chat_prompt_keeps_backticks_in_message_inert(tmp_path):
             "documents": [
                 {
                     "document_key": "policy",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [],
                 }
             ]
@@ -284,7 +323,7 @@ def test_chat_prompt_keeps_backticks_in_selected_document_key_inert(tmp_path):
             "documents": [
                 {
                     "document_key": "policy",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [],
                 }
             ]
@@ -355,7 +394,7 @@ def test_chat_sanitizes_missing_active_snapshot_tool_output(tmp_path):
             "documents": [
                 {
                     "document_key": "policy",
-                    "latest_version_label": "v2026.06.20.001",
+                    "latest_version_label": "2026-06-20-001",
                     "versions": [],
                 }
             ]
@@ -402,7 +441,7 @@ def test_ingest_rejects_empty_required_text_fields(tmp_path, field):
     client = _client(tmp_path)
     payload = {
         "document_key": "policy",
-        "version_label": "v2026.06.20.001",
+        "version_label": "2026-06-20-001",
         "title": "Policy",
         "text": "Body",
     }
@@ -426,7 +465,7 @@ def test_ingest_calls_runner_with_ingest_prompt(tmp_path):
         "/api/ingest",
         json={
             "document_key": "policy",
-            "version_label": "v2026.06.20.001",
+            "version_label": "2026-06-20-001",
             "title": "Policy",
             "text": "Body",
         },
@@ -437,7 +476,7 @@ def test_ingest_calls_runner_with_ingest_prompt(tmp_path):
     prompt, _settings = calls[0]
     assert "ingest_text_version" in prompt
     assert "policy" in prompt
-    assert "v2026.06.20.001" in prompt
+    assert "2026-06-20-001" in prompt
     assert "Policy" in prompt
     assert "Body" in prompt
 
@@ -550,7 +589,7 @@ def test_documents_remains_usable_when_hermes_provisioning_fails(
             "/api/ingest",
             {
                 "document_key": "policy",
-                "version_label": "v2026.06.20.001",
+                "version_label": "2026-06-20-001",
                 "title": "Policy",
                 "text": "Body",
             },

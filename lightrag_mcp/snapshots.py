@@ -45,6 +45,24 @@ class SourceRegistry:
         target.write_text(body, encoding="utf-8")
         return target
 
+    def write_file_version(
+        self,
+        document_key: str,
+        version_label: str,
+        filename: str,
+        content: bytes,
+    ) -> Path:
+        self._ensure_dir()
+        extension = Path(filename).suffix
+        if not extension:
+            raise ValueError("filename must include a file extension")
+        source_name = build_source_name(document_key, version_label, extension)
+        target = self.source_dir / source_name
+        if target.exists():
+            raise ValueError(f"document version already exists: {source_name}")
+        target.write_bytes(content)
+        return target
+
     def list_sources(self) -> list[VersionedSource]:
         self._ensure_dir()
         sources: list[VersionedSource] = []
@@ -89,11 +107,17 @@ class LatestSnapshotBuilder:
 
         for source in latest_sources:
             source_path = self.registry.source_path(source)
-            text = source_path.read_text(encoding="utf-8")
-            insert_result = await client.insert_text(
-                text,
-                file_source=source.source_name,
-            )
+            if _should_insert_as_text(source.extension):
+                text = source_path.read_text(encoding="utf-8")
+                insert_result = await client.insert_text(
+                    text,
+                    file_source=source.source_name,
+                )
+            else:
+                insert_result = await client.insert_file(
+                    source_path,
+                    file_source=source.source_name,
+                )
             insert_results.append(dict(insert_result))
             indexed_sources.append(source.source_name)
 
@@ -128,3 +152,7 @@ def read_active_snapshot(path: Path) -> ActiveSnapshot | None:
         base_url=str(data["base_url"]),
         latest_versions=dict(data.get("latest_versions", {})),
     )
+
+
+def _should_insert_as_text(extension: str) -> bool:
+    return extension.lower() in {".md", ".markdown", ".txt", ".csv", ".json", ".log"}

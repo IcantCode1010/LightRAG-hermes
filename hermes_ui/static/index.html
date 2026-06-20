@@ -70,17 +70,18 @@
         >
           <form class="tool-form" id="ingest-form">
             <label class="file-loader" for="document-file">
-              <span>Load text file</span>
+              <span>Choose file</span>
               <input
                 id="document-file"
                 name="document_file"
                 type="file"
-                accept=".txt,.md,.markdown,.csv,.json,.log,text/*"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.markdown,.csv,.json,.log,text/*,application/pdf"
               />
             </label>
             <p class="note">
-              Load a UTF-8 text-like file or paste text below, then ingest it as a
-              versioned document.
+              Choose a document file or paste text below, then ingest it as a
+              stored version. PDF and Office files are processed by LightRAG when
+              the latest snapshot is built.
             </p>
             <label for="document-key">
               <span>Document key</span>
@@ -92,8 +93,8 @@
                 id="version-label"
                 name="version_label"
                 autocomplete="off"
-                pattern="^v\d{4}\.\d{2}\.\d{2}\.\d{3}$"
-                title="Use vYYYY.MM.DD.NNN, for example v2026.06.20.001"
+                pattern="^\d{4}-\d{2}-\d{2}-[A-Za-z0-9._-]+$"
+                title="Use YYYY-MM-DD-label, for example 2026-06-20-001"
                 required
               />
             </label>
@@ -103,7 +104,7 @@
             </label>
             <label for="document-text">
               <span>Text</span>
-              <textarea id="document-text" name="text" rows="8" required></textarea>
+              <textarea id="document-text" name="text" rows="8"></textarea>
             </label>
             <button type="submit">Ingest version</button>
           </form>

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -60,6 +61,31 @@ async def test_insert_text_posts_file_source():
     assert seen_json["text"] == "Version body"
     assert seen_json["file_source"] == "handbook@2026-07-01-final.md"
     assert result["track_id"] == "insert-1"
+
+
+@pytest.mark.asyncio
+async def test_insert_file_uploads_multipart_with_versioned_filename(tmp_path: Path):
+    upload = tmp_path / "contract@2026-07-01-final.pdf"
+    upload.write_bytes(b"%PDF-1.4\n")
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["content_type"] = request.headers["content-type"]
+        seen["body"] = request.content
+        return httpx.Response(200, json={"status": "success", "track_id": "upload-1"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = LightRAGClient("http://lightrag-api:9621", "", http=http)
+        result = await client.insert_file(upload)
+
+    assert seen["url"] == "http://lightrag-api:9621/documents/upload"
+    assert "multipart/form-data" in seen["content_type"]
+    assert b'name="file"' in seen["body"]
+    assert b'filename="contract@2026-07-01-final.pdf"' in seen["body"]
+    assert b"%PDF-1.4" in seen["body"]
+    assert result["track_id"] == "upload-1"
 
 
 @pytest.mark.asyncio
