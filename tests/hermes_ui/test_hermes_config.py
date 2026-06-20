@@ -21,6 +21,7 @@ def test_settings_defaults_are_container_safe_and_env_driven(monkeypatch):
         "HERMES_PROVIDER",
         "HERMES_BASE_URL",
         "LIGHTRAG_MCP_URL",
+        "HERMES_SOUL_FILE",
         "HERMES_UI_HERMES_TIMEOUT",
     ]
     for env_name in env_names:
@@ -35,8 +36,10 @@ def test_settings_defaults_are_container_safe_and_env_driven(monkeypatch):
     assert defaults.hermes_provider == "openai-api"
     assert defaults.hermes_base_url == "https://api.openai.com/v1"
     assert defaults.mcp_url == "http://lightrag-mcp:8765/mcp"
+    assert defaults.soul_file.name == "soul.md"
     assert defaults.hermes_timeout_seconds == 120
 
+    soul_file = Path("/tmp/custom-soul.md")
     monkeypatch.setenv("HERMES_UI_HOST", "127.0.0.1")
     monkeypatch.setenv("HERMES_UI_PORT", "9999")
     monkeypatch.setenv("HERMES_HOME", "/tmp/hermes-test")
@@ -44,6 +47,7 @@ def test_settings_defaults_are_container_safe_and_env_driven(monkeypatch):
     monkeypatch.setenv("HERMES_PROVIDER", "custom-provider")
     monkeypatch.setenv("HERMES_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.setenv("LIGHTRAG_MCP_URL", "http://localhost:8765/mcp")
+    monkeypatch.setenv("HERMES_SOUL_FILE", str(soul_file))
     monkeypatch.setenv("HERMES_UI_HERMES_TIMEOUT", "45")
 
     patched = HermesUISettings()
@@ -55,6 +59,7 @@ def test_settings_defaults_are_container_safe_and_env_driven(monkeypatch):
     assert patched.hermes_provider == "custom-provider"
     assert patched.hermes_base_url == "http://localhost:11434/v1"
     assert patched.mcp_url == "http://localhost:8765/mcp"
+    assert patched.soul_file == soul_file
     assert patched.hermes_timeout_seconds == 45
 
 

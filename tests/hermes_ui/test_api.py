@@ -12,9 +12,15 @@ from hermes_ui.config import HermesUISettings
 
 
 def _settings(tmp_path: Path) -> HermesUISettings:
+    soul_file = tmp_path / "soul.md"
+    soul_file.write_text(
+        "You are Test Hermes, a careful local research agent.",
+        encoding="utf-8",
+    )
     return HermesUISettings(
         hermes_home=tmp_path / "hermes",
         mcp_url="http://mcp.local:8765/mcp",
+        soul_file=soul_file,
     )
 
 
@@ -109,12 +115,51 @@ def test_chat_no_selected_docs_allows_general_agent_response(tmp_path):
     assert response.status_code == 200
     assert response.json() == {"state": "ok", "text": "general answer"}
     prompt, settings = calls[0]
+    assert "You are Test Hermes" in prompt
     assert "Answer the user directly" in prompt
     assert "No documents are currently indexed" in prompt
     assert "query_latest_all" not in prompt
     assert "query_latest_documents" not in prompt
     assert _decode_prompt_payload(prompt) == {"query": "What is 2 + 2?"}
     assert settings.mcp_url == "http://mcp.local:8765/mcp"
+
+
+def test_chat_prompt_includes_configured_soul_file(tmp_path):
+    calls = []
+    soul_file = tmp_path / "custom-soul.md"
+    soul_file.write_text(
+        "You are a local document steward with a direct, practical voice.",
+        encoding="utf-8",
+    )
+    settings = HermesUISettings(
+        hermes_home=tmp_path / "hermes",
+        mcp_url="http://mcp.local:8765/mcp",
+        soul_file=soul_file,
+    )
+
+    async def hermes_runner(prompt, runner_settings):
+        calls.append((prompt, runner_settings))
+        return {"state": "ok", "text": "answer"}
+
+    async def document_reader(mcp_url):
+        return {"documents": []}
+
+    app = create_app(
+        settings=settings,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        provision_hermes=False,
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/chat", json={"message": "Who are you?"})
+
+    assert response.status_code == 200
+    prompt, runner_settings = calls[0]
+    assert runner_settings.soul_file == soul_file
+    assert "<agent_soul>" in prompt
+    assert "local document steward" in prompt
+    assert prompt.index("<agent_soul>") < prompt.index("Answer the user directly")
 
 
 def test_chat_no_selected_docs_can_choose_latest_all_when_docs_exist(tmp_path):

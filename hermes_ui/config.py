@@ -17,6 +17,10 @@ def _env_path(name: str, default: Path) -> Path:
     return Path(value)
 
 
+def _default_soul_file() -> Path:
+    return Path(__file__).resolve().parent / "soul.md"
+
+
 @dataclass(slots=True)
 class HermesUISettings:
     host: str = field(default_factory=lambda: os.getenv("HERMES_UI_HOST", "0.0.0.0"))
@@ -41,6 +45,9 @@ class HermesUISettings:
             "LIGHTRAG_MCP_URL",
             "http://lightrag-mcp:8765/mcp",
         )
+    )
+    soul_file: Path = field(
+        default_factory=lambda: _env_path("HERMES_SOUL_FILE", _default_soul_file())
     )
     hermes_timeout_seconds: int = field(
         default_factory=lambda: _env_int("HERMES_UI_HERMES_TIMEOUT", 120)

@@ -56,6 +56,17 @@ The Web UI does not provide delete, clear, reset, or raw LightRAG query
 controls. Ingest creates archived document versions, and search runs through
 the latest-only snapshot workflow described below.
 
+The agent identity is stored in the bundled soul file:
+
+```text
+hermes_ui/soul.md
+```
+
+The `hermes-ui` service loads that file into chat prompts before per-request
+routing instructions. Override it with `HERMES_SOUL_FILE` if you want to mount a
+custom local soul file. Do not put secrets or unstable runtime state in this
+file.
+
 By default, the UI is bound to localhost only at `127.0.0.1:8787`. Its persisted
 Hermes UI home is stored under:
 

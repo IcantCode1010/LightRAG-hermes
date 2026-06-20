@@ -94,6 +94,7 @@ services:
       HERMES_MODEL: "${HERMES_MODEL:-gpt-5.4-mini}"
       HERMES_PROVIDER: "openai-api"
       HERMES_BASE_URL: "https://api.openai.com/v1"
+      HERMES_SOUL_FILE: "${HERMES_SOUL_FILE:-/app/hermes_ui/soul.md}"
       LIGHTRAG_MCP_URL: "http://lightrag-mcp:8765/mcp"
     depends_on:
       - lightrag-mcp
