@@ -1,5 +1,18 @@
 # syntax=docker/dockerfile:1
 
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend-builder
+
+WORKDIR /app
+
+COPY hermes_ui/frontend/package*.json ./hermes_ui/frontend/
+RUN --mount=type=cache,target=/root/.npm \
+    cd hermes_ui/frontend \
+    && npm ci
+
+COPY hermes_ui/frontend/ ./hermes_ui/frontend/
+RUN cd hermes_ui/frontend \
+    && npm run build
+
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -30,6 +43,7 @@ RUN pip install \
         "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_AGENT_REF}"
 
 COPY hermes_ui/ ./hermes_ui/
+COPY --from=frontend-builder /app/hermes_ui/static ./hermes_ui/static
 
 RUN groupadd --system --gid 10001 hermes \
     && useradd --uid 10001 --gid hermes --home-dir /app/hermes_home --shell /usr/sbin/nologin hermes \

@@ -1,0 +1,27 @@
+{
+  "name": "hermes-local-web-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --outDir ../static --emptyOutDir",
+    "dev": "vite --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-markdown": "^10.1.0",
+    "tailwind-merge": "^3.6.0",
+    "vite": "^8.0.16"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "~6.0.3"
+  }
+}
