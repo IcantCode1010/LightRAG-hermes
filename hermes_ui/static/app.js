@@ -12,6 +12,7 @@ const elements = {
   chatForm: document.querySelector("#chat-form"),
   chatMessage: document.querySelector("#chat-message"),
   ingestForm: document.querySelector("#ingest-form"),
+  documentFile: document.querySelector("#document-file"),
   snapshotForm: document.querySelector("#snapshot-form"),
   versionLabel: document.querySelector("#version-label"),
   snapshotId: document.querySelector("#snapshot-id"),
@@ -22,6 +23,7 @@ elements.refresh.addEventListener("click", () => {
 });
 elements.chatForm.addEventListener("submit", sendChat);
 elements.ingestForm.addEventListener("submit", ingestDocument);
+elements.documentFile.addEventListener("change", loadDocumentFile);
 elements.snapshotForm.addEventListener("submit", buildSnapshot);
 
 for (const tab of document.querySelectorAll(".tab")) {
@@ -94,6 +96,29 @@ async function ingestDocument(event) {
       addMessage("system", formatError(error));
     }
   });
+}
+
+async function loadDocumentFile(event) {
+  const [file] = event.target.files || [];
+  if (!file) {
+    return;
+  }
+
+  try {
+    const text = await readTextFile(file);
+    if (!formValue(elements.ingestForm, "document_key")) {
+      elements.ingestForm.elements.document_key.value = documentKeyFromFilename(file.name);
+    }
+    if (!formValue(elements.ingestForm, "title")) {
+      elements.ingestForm.elements.title.value = titleFromFilename(file.name);
+    }
+    elements.ingestForm.elements.text.value = text;
+    addMessage("system", `Loaded ${file.name}. Review the fields, then ingest this version.`);
+  } catch (error) {
+    addMessage("system", formatError(error));
+  } finally {
+    event.target.value = "";
+  }
 }
 
 async function buildSnapshot(event) {
@@ -341,6 +366,28 @@ function parseJson(text) {
 
 function formValue(form, name) {
   return form.elements[name].value.trim();
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(new Error(`Could not read ${file.name}.`)));
+    reader.readAsText(file);
+  });
+}
+
+function documentKeyFromFilename(filename) {
+  const stem = filename.replace(/\.[^.]+$/, "");
+  const key = stem
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return key || "document";
+}
+
+function titleFromFilename(filename) {
+  return filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || "Document";
 }
 
 function datePart() {

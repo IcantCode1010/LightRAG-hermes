@@ -69,6 +69,19 @@
           aria-labelledby="documents-tab-button"
         >
           <form class="tool-form" id="ingest-form">
+            <label class="file-loader" for="document-file">
+              <span>Load text file</span>
+              <input
+                id="document-file"
+                name="document_file"
+                type="file"
+                accept=".txt,.md,.markdown,.csv,.json,.log,text/*"
+              />
+            </label>
+            <p class="note">
+              Load a UTF-8 text-like file or paste text below, then ingest it as a
+              versioned document.
+            </p>
             <label for="document-key">
               <span>Document key</span>
               <input id="document-key" name="document_key" autocomplete="off" required />

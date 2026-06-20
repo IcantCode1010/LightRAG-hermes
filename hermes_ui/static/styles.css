@@ -283,6 +283,19 @@ label {
   font-weight: 700;
 }
 
+.file-loader {
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel-alt);
+  padding: 12px;
+}
+
+.file-loader input {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
