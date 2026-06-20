@@ -109,6 +109,8 @@ async def call_tool(
     text = getattr(content[0], "text", None)
     if not text:
         raise RuntimeError(f"MCP tool {tool_name!r} returned empty text content")
+    if bool(getattr(result, "isError", False)):
+        raise RuntimeError(text)
 
     try:
         parsed = json.loads(text)

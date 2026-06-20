@@ -16,7 +16,6 @@ from hermes_ui.document_router import route_document_query
 from hermes_ui.hermes_config import ensure_hermes_home
 from hermes_ui.hermes_runner import (
     build_ingest_prompt,
-    build_snapshot_prompt,
     run_hermes_query,
 )
 from hermes_ui.mcp_client import (
@@ -232,8 +231,11 @@ def create_app(
 
     @app.post("/api/snapshots/build")
     async def api_build_snapshot(request: SnapshotBuildRequest) -> dict[str, Any]:
-        _ensure_hermes_configured(app)
-        return await hermes_runner(build_snapshot_prompt(request.snapshot_id), settings)
+        return await call_tool(
+            settings.mcp_url,
+            "build_latest_snapshot",
+            {"snapshot_id": request.snapshot_id},
+        )
 
     static_dir = Path(__file__).resolve().parent / "static"
     if static_dir.exists():

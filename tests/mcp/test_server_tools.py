@@ -45,6 +45,24 @@ def test_build_list_documents_marks_latest_versions(tmp_path: Path):
     ]
 
 
+def test_build_list_documents_marks_active_snapshot_searchability(tmp_path: Path):
+    registry = SourceRegistry(tmp_path)
+    registry.write_text_version("handbook", "2026-06-19-review", "A", "one")
+    registry.write_text_version("handbook", "2026-07-01-final", "A", "two")
+    active = ActiveSnapshot(
+        snapshot_id="snapshot-1",
+        base_url="http://snapshot-api:9621",
+        latest_versions={},
+    )
+
+    result = build_list_documents(registry, active_snapshot=active)
+
+    assert result["documents"][0]["versions"] == [
+        {"label": "2026-06-19-review", "searchable": False},
+        {"label": "2026-07-01-final", "searchable": False},
+    ]
+
+
 def test_build_search_documents_matches_key_and_active_snapshot_state(tmp_path: Path):
     registry = SourceRegistry(tmp_path)
     registry.write_text_version("airbus-flight-controls", "2026-06-20-001", "A", "one")
@@ -269,7 +287,19 @@ async def test_build_latest_snapshot_with_client_activates_after_latest_inserts(
             self.sources: list[str] = []
 
         async def documents(self):
-            return {"documents": []}
+            return {
+                "documents": [
+                    {
+                        "file_path": source,
+                        "status": "processed",
+                        "chunks_count": 1,
+                    }
+                    for source in self.sources
+                ]
+            }
+
+        async def pipeline_status(self):
+            return {"busy": False}
 
         async def insert_text(self, text: str, *, file_source: str | None = None):
             self.sources.append(file_source or "")
@@ -373,7 +403,15 @@ async def test_build_snapshot_status_reports_current_when_active_matches_latest(
 ):
     class FakeClient:
         async def documents(self):
-            return {"documents": [{"id": "handbook"}]}
+            return {
+                "documents": [
+                    {
+                        "file_path": "handbook@2026-07-01-final.md",
+                        "status": "processed",
+                        "chunks_count": 1,
+                    }
+                ]
+            }
 
     registry = SourceRegistry(tmp_path / "sources")
     registry.write_text_version("handbook", "2026-07-01-final", "A", "new")
@@ -403,6 +441,97 @@ async def test_build_snapshot_status_reports_current_when_active_matches_latest(
         "Active snapshot is current. Rotate snapshot target storage only before "
         "building the next replacement snapshot."
     )
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_status_blocks_when_active_latest_failed_processing(
+    tmp_path: Path,
+):
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_file_version("contract", "2026-07-01-final", "contract.pdf", b"x")
+    active_path = tmp_path / "active.json"
+    write_active_snapshot(
+        active_path,
+        ActiveSnapshot(
+            snapshot_id="snapshot-2026-07-01",
+            base_url="http://snapshot-api:9621",
+            latest_versions={"contract": "2026-07-01-final"},
+        ),
+    )
+
+    class FakeClient:
+        async def documents(self):
+            return {
+                "documents": [
+                    {
+                        "file_path": "contract@2026-07-01-final.pdf",
+                        "status": "failed",
+                        "chunks_count": None,
+                    }
+                ]
+            }
+
+    result = await build_snapshot_status_with_client(
+        registry=registry,
+        active_snapshot_file=active_path,
+        snapshot_base_url="http://snapshot-api:9621",
+        client=FakeClient(),
+    )
+
+    assert result["state"] == "blocked"
+    assert result["current"] is False
+    assert result["needs_rotation"] is True
+    assert "processed chunks" in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_status_reports_degraded_when_partial_latest_processed(
+    tmp_path: Path,
+):
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_file_version("contract", "2026-07-01-final", "contract.pdf", b"x")
+    registry.write_file_version("empty", "2026-07-01-final", "empty.pdf", b"x")
+    active_path = tmp_path / "active.json"
+    write_active_snapshot(
+        active_path,
+        ActiveSnapshot(
+            snapshot_id="snapshot-2026-07-01",
+            base_url="http://snapshot-api:9621",
+            latest_versions={"contract": "2026-07-01-final"},
+        ),
+    )
+
+    class FakeClient:
+        async def documents(self):
+            return {
+                "documents": [
+                    {
+                        "file_path": "contract@2026-07-01-final.pdf",
+                        "status": "processed",
+                        "chunks_count": 8,
+                    },
+                    {
+                        "file_path": "empty@2026-07-01-final.pdf",
+                        "status": "failed",
+                        "chunks_count": None,
+                    },
+                ]
+            }
+
+    result = await build_snapshot_status_with_client(
+        registry=registry,
+        active_snapshot_file=active_path,
+        snapshot_base_url="http://snapshot-api:9621",
+        client=FakeClient(),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["current"] is False
+    assert result["needs_rotation"] is True
+    assert result["active_snapshot"]["latest_versions"] == {
+        "contract": "2026-07-01-final"
+    }
+    assert "1 latest document(s) failed" in result["reason"]
 
 
 @pytest.mark.asyncio

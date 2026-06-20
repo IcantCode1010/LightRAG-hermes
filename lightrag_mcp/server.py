@@ -16,6 +16,7 @@ from lightrag_mcp.snapshots import (
     read_active_snapshot,
 )
 from lightrag_mcp.versioning import validate_document_key
+from lightrag_mcp.versioning import parse_source_name
 
 
 config = MCPConfig.from_env()
@@ -33,15 +34,31 @@ def build_adapter_status(
     }
 
 
-def build_list_documents(registry: SourceRegistry) -> dict[str, list[dict[str, object]]]:
+def build_list_documents(
+    registry: SourceRegistry,
+    *,
+    active_snapshot: ActiveSnapshot | None = None,
+) -> dict[str, list[dict[str, object]]]:
     sources = registry.list_sources()
     latest = registry.latest_sources()
     document_keys = sorted({source.document_key for source in sources})
     documents: list[dict[str, object]] = []
     for key in document_keys:
-        versions = sorted(
-            source.version_label for source in sources if source.document_key == key
+        key_sources = sorted(
+            (source for source in sources if source.document_key == key),
+            key=lambda source: source.version_label,
         )
+        if active_snapshot is None:
+            versions: list[object] = [source.version_label for source in key_sources]
+        else:
+            active_version = active_snapshot.latest_versions.get(key)
+            versions = [
+                {
+                    "label": source.version_label,
+                    "searchable": active_version == source.version_label,
+                }
+                for source in key_sources
+            ]
         documents.append(
             {
                 "document_key": key,
@@ -289,6 +306,7 @@ async def build_latest_snapshot_with_client(
         "base_url": result.snapshot.base_url,
         "latest_versions": result.snapshot.latest_versions,
         "indexed_sources": result.indexed_sources,
+        "failed_sources": result.failed_sources,
         "insert_results": result.insert_results,
     }
 
@@ -305,11 +323,22 @@ async def build_snapshot_status_with_client(
         key: source.version_label for key, source in sorted(latest.items())
     }
     target_documents = await client.documents()
-    target_count = len(target_documents.get("documents") or [])
+    target_document_records = target_documents.get("documents") or []
+    target_count = len(target_document_records)
     active = read_active_snapshot(active_snapshot_file)
     active_versions = active.latest_versions if active is not None else {}
+    processed_versions = _processed_latest_versions(target_document_records)
     can_build = target_count == 0
-    current = target_count > 0 and active is not None and active_versions == latest_versions
+    active_matches_latest = active is not None and active_versions == latest_versions
+    processed_matches_latest = processed_versions == latest_versions
+    active_matches_processed = active is not None and active_versions == processed_versions
+    current = target_count > 0 and active_matches_latest and processed_matches_latest
+    degraded = (
+        target_count > 0
+        and not current
+        and bool(processed_versions)
+        and active_matches_processed
+    )
     needs_rotation = target_count > 0 and not current
     if current:
         state = "current"
@@ -317,9 +346,24 @@ async def build_snapshot_status_with_client(
             "Active snapshot is current. Rotate snapshot target storage only before "
             "building the next replacement snapshot."
         )
+    elif degraded:
+        state = "degraded"
+        missing_count = max(len(latest_versions) - len(processed_versions), 0)
+        reason = (
+            f"Active snapshot is searchable for {len(processed_versions)} latest "
+            f"document(s); {missing_count} latest document(s) failed or produced "
+            "no chunks."
+        )
     elif can_build:
         state = "ready"
         reason = "Snapshot target is empty."
+    elif active_matches_latest and not processed_matches_latest:
+        state = "blocked"
+        reason = (
+            "Active snapshot metadata matches latest versions, but the snapshot "
+            "target is missing processed chunks for one or more latest documents. "
+            "Rotate snapshot target storage and rebuild."
+        )
     else:
         state = "blocked"
         reason = "Rotate or archive snapshot target storage before building."
@@ -335,6 +379,24 @@ async def build_snapshot_status_with_client(
         "needs_rotation": needs_rotation,
         "reason": reason,
     }
+
+
+def _processed_latest_versions(documents: list[object]) -> dict[str, str]:
+    processed: dict[str, str] = {}
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        if str(document.get("status") or "") != "processed":
+            continue
+        chunks_count = document.get("chunks_count")
+        if not isinstance(chunks_count, int) or chunks_count < 1:
+            continue
+        try:
+            source = parse_source_name(str(document.get("file_path") or ""))
+        except ValueError:
+            continue
+        processed[source.document_key] = source.version_label
+    return processed
 
 
 def _snapshot_payload(snapshot: ActiveSnapshot | None) -> dict[str, object] | None:
@@ -360,7 +422,10 @@ def adapter_status() -> dict[str, str]:
 @mcp.tool()
 def list_documents() -> dict[str, list[dict[str, object]]]:
     """List known document keys and their stored version labels."""
-    return build_list_documents(SourceRegistry(config.source_dir))
+    return build_list_documents(
+        SourceRegistry(config.source_dir),
+        active_snapshot=read_active_snapshot(config.active_snapshot_file),
+    )
 
 
 @mcp.tool()

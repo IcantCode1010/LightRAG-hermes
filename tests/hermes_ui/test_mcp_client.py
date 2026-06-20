@@ -183,3 +183,48 @@ async def test_call_tool_parses_first_text_content_as_json(monkeypatch: pytest.M
     )
 
     assert result == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_call_tool_raises_plain_tool_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStreamableHttpClient:
+        async def __aenter__(self):
+            return "read-stream", "write-stream", "session-id"
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeContent:
+        text = "snapshot source failed to index: empty-upload.pdf"
+
+    class FakeResult:
+        isError = True
+        content = [FakeContent()]
+
+    class FakeSession:
+        def __init__(self, read, write):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def initialize(self):
+            return None
+
+        async def call_tool(self, tool_name, args):
+            return FakeResult()
+
+    monkeypatch.setattr(
+        mcp_client,
+        "streamablehttp_client",
+        lambda mcp_url: FakeStreamableHttpClient(),
+    )
+    monkeypatch.setattr(mcp_client, "ClientSession", FakeSession)
+
+    with pytest.raises(RuntimeError, match="snapshot source failed to index"):
+        await mcp_client.call_tool("http://localhost:8000/mcp", "build_latest_snapshot")

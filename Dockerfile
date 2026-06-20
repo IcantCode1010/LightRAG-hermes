@@ -92,6 +92,10 @@ RUN --mount=type=cache,target=/root/.local/share/uv \
     uv sync --frozen --no-dev --extra api --extra offline --no-editable \
     && /app/.venv/bin/python -m ensurepip --upgrade
 
+# Required by the legacy PDF extractor fallback (`import fitz`) for malformed
+# PDFs that pypdf cannot parse cleanly.
+RUN /app/.venv/bin/python -m pip install "PyMuPDF>=1.24,<2.0"
+
 # Create persistent data directories AFTER package installation
 RUN mkdir -p /app/data/rag_storage /app/data/inputs /app/data/prompts /app/data/tiktoken
 

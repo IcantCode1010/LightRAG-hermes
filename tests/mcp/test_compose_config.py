@@ -38,6 +38,12 @@ def test_snapshot_service_is_internal_and_has_dedicated_storage():
     )
 
 
+def test_lightrag_image_installs_pymupdf_for_pdf_fallback():
+    dockerfile = Path("Dockerfile").read_text()
+
+    assert "PyMuPDF" in dockerfile
+
+
 def test_lightrag_services_use_openai_embeddings_from_shared_env():
     compose = yaml.safe_load(Path("docker-compose.hermes.yml").read_text())
 

@@ -1116,14 +1116,15 @@ def test_ingest_calls_runner_with_ingest_prompt(tmp_path):
     assert "Body" in prompt
 
 
-def test_snapshots_build_calls_runner_with_snapshot_prompt(tmp_path):
-    calls = []
+def test_snapshots_build_calls_mcp_tool_directly(tmp_path, monkeypatch):
+    tool_calls = []
 
-    async def hermes_runner(prompt, settings):
-        calls.append((prompt, settings))
-        return {"state": "ok", "text": "built"}
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        tool_calls.append((mcp_url, tool_name, args))
+        return {"status": "built", "snapshot_id": args["snapshot_id"]}
 
-    client = _client(tmp_path, hermes_runner=hermes_runner)
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+    client = _client(tmp_path)
 
     response = client.post(
         "/api/snapshots/build",
@@ -1131,10 +1132,17 @@ def test_snapshots_build_calls_runner_with_snapshot_prompt(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"state": "ok", "text": "built"}
-    prompt, _settings = calls[0]
-    assert "build_latest_snapshot" in prompt
-    assert "snapshot-2026-06-20" in prompt
+    assert response.json() == {
+        "status": "built",
+        "snapshot_id": "snapshot-2026-06-20",
+    }
+    assert tool_calls == [
+        (
+            "http://mcp.local:8765/mcp",
+            "build_latest_snapshot",
+            {"snapshot_id": "snapshot-2026-06-20"},
+        )
+    ]
 
 
 def test_snapshots_build_rejects_empty_snapshot_id(tmp_path):
@@ -1216,6 +1224,36 @@ def test_documents_remains_usable_when_hermes_provisioning_fails(
     }
 
 
+def test_snapshot_build_remains_usable_when_hermes_provisioning_fails(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    tool_calls = []
+
+    async def fake_call_tool(mcp_url, tool_name, args=None):
+        tool_calls.append((mcp_url, tool_name, args))
+        return {"status": "built"}
+
+    monkeypatch.setattr(hermes_ui.api, "call_tool", fake_call_tool)
+    app = create_app(settings=_settings(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/snapshots/build",
+            json={"snapshot_id": "snapshot-2026-06-20"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "built"}
+    assert tool_calls == [
+        (
+            "http://mcp.local:8765/mcp",
+            "build_latest_snapshot",
+            {"snapshot_id": "snapshot-2026-06-20"},
+        )
+    ]
+
+
 @pytest.mark.parametrize(
     ("path", "payload"),
     [
@@ -1229,7 +1267,6 @@ def test_documents_remains_usable_when_hermes_provisioning_fails(
                 "text": "Body",
             },
         ),
-        ("/api/snapshots/build", {"snapshot_id": "snapshot-2026-06-20"}),
     ],
 )
 def test_agent_routes_return_503_when_hermes_provisioning_fails(
