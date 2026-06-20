@@ -90,11 +90,38 @@ def test_documents_returns_reader_json(tmp_path):
     }
 
 
-def test_chat_no_selected_docs_uses_query_latest_all_wording(tmp_path):
+def test_chat_no_selected_docs_allows_general_agent_response(tmp_path):
     calls = []
 
     async def hermes_runner(prompt, settings):
         calls.append((prompt, settings))
+        return {"state": "ok", "text": "general answer"}
+
+    async def document_reader(mcp_url):
+        return {"documents": []}
+
+    client = _client(
+        tmp_path, hermes_runner=hermes_runner, document_reader=document_reader
+    )
+
+    response = client.post("/api/chat", json={"message": "What is 2 + 2?"})
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "ok", "text": "general answer"}
+    prompt, settings = calls[0]
+    assert "Answer the user directly" in prompt
+    assert "No documents are currently indexed" in prompt
+    assert "query_latest_all" not in prompt
+    assert "query_latest_documents" not in prompt
+    assert _decode_prompt_payload(prompt) == {"query": "What is 2 + 2?"}
+    assert settings.mcp_url == "http://mcp.local:8765/mcp"
+
+
+def test_chat_no_selected_docs_can_choose_latest_all_when_docs_exist(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
         return {"state": "ok", "text": "answer"}
 
     async def document_reader(mcp_url):
@@ -116,12 +143,9 @@ def test_chat_no_selected_docs_uses_query_latest_all_wording(tmp_path):
 
     assert response.status_code == 200
     assert response.json() == {"state": "ok", "text": "answer"}
-    prompt, settings = calls[0]
-    assert "lightrag-hermes" in prompt
-    assert "query_latest_all" in prompt
-    assert "query_latest_documents" not in prompt
-    assert _decode_prompt_payload(prompt) == {"query": "What changed?"}
-    assert settings.mcp_url == "http://mcp.local:8765/mcp"
+    assert "query_latest_all" in calls[0]
+    assert "only when the user asks about indexed documents" in calls[0]
+    assert _decode_prompt_payload(calls[0]) == {"query": "What changed?"}
 
 
 def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_path):
@@ -250,12 +274,12 @@ def test_chat_rejects_empty_message(tmp_path):
     assert response.status_code == 422
 
 
-def test_chat_empty_document_registry_returns_local_guidance(tmp_path):
+def test_chat_empty_document_registry_still_runs_general_agent(tmp_path):
     calls = []
 
     async def hermes_runner(prompt, settings):
         calls.append(prompt)
-        return {"state": "ok", "text": "unexpected"}
+        return {"state": "ok", "text": "normal agent response"}
 
     async def document_reader(mcp_url):
         return {"documents": []}
@@ -269,11 +293,9 @@ def test_chat_empty_document_registry_returns_local_guidance(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "state": "ok",
-        "text": "No documents are indexed yet. Ingest a document version first, then build a latest-version snapshot before asking document questions.",
-    }
-    assert calls == []
+    assert response.json() == {"state": "ok", "text": "normal agent response"}
+    assert len(calls) == 1
+    assert "No documents are currently indexed" in calls[0]
 
 
 def test_chat_sanitizes_missing_active_snapshot_tool_output(tmp_path):
