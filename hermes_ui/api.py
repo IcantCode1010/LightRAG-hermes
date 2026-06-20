@@ -124,6 +124,12 @@ def create_app(
     async def api_chat(request: ChatRequest) -> dict[str, Any]:
         _ensure_hermes_configured(app)
         documents = await document_reader(settings.mcp_url)
+        if _is_document_inventory_question(request.message) and not request.document_keys:
+            if documents.get("documents"):
+                snapshot = await snapshot_reader(settings.mcp_url)
+            else:
+                snapshot = {}
+            return _build_document_inventory_response(documents, snapshot)
         prompt = _build_chat_prompt(
             request.message,
             request.document_keys,
@@ -272,6 +278,79 @@ _DOCUMENT_RELATED_PATTERN = re.compile(
 
 def _looks_document_related(message: str) -> bool:
     return bool(_DOCUMENT_RELATED_PATTERN.search(message))
+
+
+_DOCUMENT_INVENTORY_PATTERN = re.compile(
+    r"\b("
+    r"what|which|list|show|tell|available|have|loaded|indexed|registered"
+    r")\b.*\b("
+    r"document|documents|doc|docs|file|files|pdf|manuals"
+    r")\b|"
+    r"\b("
+    r"document|documents|doc|docs|file|files|pdf|manuals"
+    r")\b.*\b("
+    r"what|which|list|show|available|have|loaded|indexed|registered"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_document_inventory_question(message: str) -> bool:
+    return bool(_DOCUMENT_INVENTORY_PATTERN.search(message))
+
+
+def _build_document_inventory_response(
+    documents: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    records = documents.get("documents")
+    if not isinstance(records, list) or not records:
+        return {
+            "state": "ok",
+            "text": (
+                "I do not have any document versions registered yet. "
+                "Use the Documents tab to ingest a document, then build a latest-version snapshot."
+            ),
+        }
+
+    active = snapshot.get("active_snapshot") if isinstance(snapshot, dict) else None
+    latest_versions = active.get("latest_versions") if isinstance(active, dict) else {}
+    if not isinstance(latest_versions, dict):
+        latest_versions = {}
+
+    lines = [
+        f"I have {len(records)} document keys in the registry:",
+    ]
+    missing_from_snapshot: list[str] = []
+
+    for record in sorted(records, key=lambda item: str(item.get("document_key") or "")):
+        if not isinstance(record, dict):
+            continue
+        key = str(record.get("document_key") or "untitled")
+        latest = str(record.get("latest_version_label") or "unknown")
+        active_latest = latest_versions.get(key)
+        marker = "active snapshot" if active_latest == latest else "not in active snapshot"
+        lines.append(f"- {key}@{latest} ({marker})")
+        if active_latest != latest:
+            missing_from_snapshot.append(f"{key}@{latest}")
+
+    if isinstance(active, dict) and active.get("snapshot_id"):
+        lines.append("")
+        lines.append(f"Active snapshot: {active['snapshot_id']}")
+    else:
+        lines.append("")
+        lines.append("Active snapshot: none")
+
+    if missing_from_snapshot:
+        lines.append("")
+        lines.append("Missing from the active snapshot:")
+        lines.extend(f"- {source}" for source in missing_from_snapshot)
+        reason = snapshot.get("reason") if isinstance(snapshot, dict) else None
+        if reason:
+            lines.append("")
+            lines.append(f"Snapshot status: {reason}")
+
+    return {"state": "ok", "text": "\n".join(lines)}
 
 
 def _normalize_chat_response(response: dict[str, Any]) -> dict[str, Any]:

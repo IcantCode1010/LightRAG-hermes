@@ -349,6 +349,72 @@ def test_chat_greeting_does_not_offer_document_tools_when_docs_exist(tmp_path):
     assert _decode_prompt_payload(calls[0]) == {"query": "hi"}
 
 
+def test_chat_document_inventory_uses_registry_not_snapshot_query(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "should not be used"}
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "airbus",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+                {
+                    "document_key": "boeing",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+                {
+                    "document_key": "upload-check",
+                    "latest_version_label": "2026-06-19-001",
+                    "versions": [{"label": "2026-06-19-001", "searchable": True}],
+                },
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "blocked",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-002",
+                "latest_versions": {
+                    "airbus": "2026-06-20-001",
+                    "upload-check": "2026-06-19-001",
+                },
+            },
+            "target_document_count": 2,
+            "can_build": False,
+            "reason": "Rotate or archive snapshot target storage before building.",
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post(
+        "/api/chat", json={"message": "what documents do you have?"}
+    )
+
+    assert response.status_code == 200
+    text = response.json()["text"]
+    assert calls == []
+    assert "3 document keys in the registry" in text
+    assert "airbus" in text
+    assert "boeing" in text
+    assert "upload-check" in text
+    assert "Active snapshot: snapshot-2026-06-20.openai-002" in text
+    assert "Missing from the active snapshot" in text
+    assert "boeing@2026-06-20-001" in text
+
+
 def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_path):
     calls = []
 
@@ -475,7 +541,7 @@ def test_chat_rejects_empty_message(tmp_path):
     assert response.status_code == 422
 
 
-def test_chat_empty_document_registry_still_runs_general_agent(tmp_path):
+def test_chat_empty_document_registry_answers_inventory_directly(tmp_path):
     calls = []
 
     async def hermes_runner(prompt, settings):
@@ -494,9 +560,11 @@ def test_chat_empty_document_registry_still_runs_general_agent(tmp_path):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"state": "ok", "text": "normal agent response"}
-    assert len(calls) == 1
-    assert "No documents are currently indexed" in calls[0]
+    assert response.json() == {
+        "state": "ok",
+        "text": "I do not have any document versions registered yet. Use the Documents tab to ingest a document, then build a latest-version snapshot.",
+    }
+    assert calls == []
 
 
 def test_chat_sanitizes_missing_active_snapshot_tool_output(tmp_path):
