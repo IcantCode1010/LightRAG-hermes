@@ -41,12 +41,33 @@
       </section>
 
       <aside class="tools-panel" aria-label="Tools">
-        <nav class="tabs" aria-label="Tool views">
-          <button class="tab is-active" data-tab="documents" type="button">Documents</button>
-          <button class="tab" data-tab="snapshot" type="button">Snapshot</button>
+        <nav class="tabs" role="tablist" aria-label="Tool views">
+          <button
+            class="tab is-active"
+            id="documents-tab-button"
+            data-tab="documents"
+            type="button"
+            role="tab"
+            aria-controls="documents-tab"
+            aria-selected="true"
+          >Documents</button>
+          <button
+            class="tab"
+            id="snapshot-tab-button"
+            data-tab="snapshot"
+            type="button"
+            role="tab"
+            aria-controls="snapshot-tab"
+            aria-selected="false"
+          >Snapshot</button>
         </nav>
 
-        <section class="tool-view" id="documents-tab">
+        <section
+          class="tool-view"
+          id="documents-tab"
+          role="tabpanel"
+          aria-labelledby="documents-tab-button"
+        >
           <form class="tool-form" id="ingest-form">
             <label for="document-key">
               <span>Document key</span>
@@ -83,7 +104,13 @@
           </section>
         </section>
 
-        <section class="tool-view" id="snapshot-tab" hidden>
+        <section
+          class="tool-view"
+          id="snapshot-tab"
+          role="tabpanel"
+          aria-labelledby="snapshot-tab-button"
+          hidden
+        >
           <form class="tool-form" id="snapshot-form">
             <label for="snapshot-id">
               <span>Snapshot ID</span>

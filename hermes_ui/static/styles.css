@@ -194,6 +194,8 @@ h3 {
 .status-label,
 .message-role,
 .doc-key {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
@@ -299,6 +301,8 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .version-list {
@@ -385,12 +389,12 @@ label {
 }
 
 @media (max-width: 560px) {
-  .panel-header,
   .composer {
     grid-template-columns: 1fr;
   }
 
   .panel-header {
+    flex-direction: column;
     align-items: stretch;
   }
 

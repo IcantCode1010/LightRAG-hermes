@@ -50,6 +50,10 @@ async function refresh() {
 
 async function sendChat(event) {
   event.preventDefault();
+  if (state.pending.chat) {
+    return;
+  }
+
   const message = elements.chatMessage.value.trim();
   if (!message) {
     return;
