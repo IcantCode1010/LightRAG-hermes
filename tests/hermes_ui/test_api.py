@@ -1,3 +1,4 @@
+import importlib
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -244,5 +245,94 @@ def test_provision_hermes_false_avoids_openai_api_key_requirement(
 def test_module_level_app_exists_without_openai_api_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    assert hasattr(hermes_ui.api, "app")
-    assert hermes_ui.api.app is not None
+    module = importlib.reload(hermes_ui.api)
+
+    assert hasattr(module, "app")
+    assert module.app is not None
+
+
+def test_module_import_does_not_provision_hermes_home(tmp_path, monkeypatch):
+    hermes_home = tmp_path / "hermes-home"
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+
+    module = importlib.reload(hermes_ui.api)
+
+    assert module.app is not None
+    assert not (hermes_home / ".env").exists()
+    assert not (hermes_home / "config.yaml").exists()
+
+
+def test_status_reports_hermes_provisioning_error(tmp_path, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    async def status_reader(mcp_url):
+        return {"state": "ok", "mcp_url": mcp_url}
+
+    app = create_app(settings=_settings(tmp_path), status_reader=status_reader)
+
+    with TestClient(app) as client:
+        response = client.get("/api/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "state": "ok",
+        "mcp_url": "http://mcp.local:8765/mcp",
+        "hermes_configured": False,
+        "hermes_error": "OPENAI_API_KEY must be set before starting Hermes UI",
+    }
+
+
+def test_documents_remains_usable_when_hermes_provisioning_fails(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    async def document_reader(mcp_url):
+        return {"documents": [], "mcp_url": mcp_url}
+
+    app = create_app(settings=_settings(tmp_path), document_reader=document_reader)
+
+    with TestClient(app) as client:
+        response = client.get("/api/documents")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "documents": [],
+        "mcp_url": "http://mcp.local:8765/mcp",
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        ("/api/chat", {"message": "hello"}),
+        (
+            "/api/ingest",
+            {
+                "document_key": "policy",
+                "version_label": "v2026.06.20.001",
+                "title": "Policy",
+                "text": "Body",
+            },
+        ),
+        ("/api/snapshots/build", {"snapshot_id": "snapshot-2026-06-20"}),
+    ],
+)
+def test_agent_routes_return_503_when_hermes_provisioning_fails(
+    tmp_path, monkeypatch, path, payload
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    async def hermes_runner(prompt, settings):
+        return {"state": "ok", "text": prompt}
+
+    app = create_app(settings=_settings(tmp_path), hermes_runner=hermes_runner)
+
+    with TestClient(app) as client:
+        response = client.post(path, json=payload)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Hermes UI is not configured: OPENAI_API_KEY must be set before starting Hermes UI"
+    }

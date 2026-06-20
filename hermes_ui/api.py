@@ -1,10 +1,10 @@
+from contextlib import asynccontextmanager
 from collections.abc import Awaitable, Callable
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,14 +47,32 @@ def create_app(
     provision_hermes: bool = True,
 ) -> FastAPI:
     settings = settings or HermesUISettings()
-    if provision_hermes:
-        ensure_hermes_home(settings)
 
-    app = FastAPI(title="Hermes Local Web UI")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if provision_hermes:
+            try:
+                ensure_hermes_home(settings)
+            except RuntimeError as error:
+                app.state.hermes_configured = False
+                app.state.hermes_error = str(error)
+            else:
+                app.state.hermes_configured = True
+                app.state.hermes_error = None
+        yield
+
+    app = FastAPI(title="Hermes Local Web UI", lifespan=lifespan)
+    app.state.hermes_configured = not provision_hermes
+    app.state.hermes_error = None
 
     @app.get("/api/status")
     async def api_status() -> dict[str, Any]:
-        return await status_reader(settings.mcp_url)
+        status = await status_reader(settings.mcp_url)
+        if not app.state.hermes_configured:
+            status["hermes_configured"] = False
+            if app.state.hermes_error:
+                status["hermes_error"] = app.state.hermes_error
+        return status
 
     @app.get("/api/documents")
     async def api_documents() -> dict[str, Any]:
@@ -62,11 +80,13 @@ def create_app(
 
     @app.post("/api/chat")
     async def api_chat(request: ChatRequest) -> dict[str, Any]:
+        _ensure_hermes_configured(app)
         prompt = _build_chat_prompt(request.message, request.document_keys)
         return await hermes_runner(prompt, settings)
 
     @app.post("/api/ingest")
     async def api_ingest(request: IngestRequest) -> dict[str, Any]:
+        _ensure_hermes_configured(app)
         prompt = build_ingest_prompt(
             document_key=request.document_key,
             version_label=request.version_label,
@@ -77,6 +97,7 @@ def create_app(
 
     @app.post("/api/snapshots/build")
     async def api_build_snapshot(request: SnapshotBuildRequest) -> dict[str, Any]:
+        _ensure_hermes_configured(app)
         return await hermes_runner(build_snapshot_prompt(request.snapshot_id), settings)
 
     static_dir = Path(__file__).resolve().parent / "static"
@@ -84,6 +105,15 @@ def create_app(
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app
+
+
+def _ensure_hermes_configured(app: FastAPI) -> None:
+    if app.state.hermes_configured:
+        return
+    detail = "Hermes UI is not configured"
+    if app.state.hermes_error:
+        detail = f"{detail}: {app.state.hermes_error}"
+    raise HTTPException(status_code=503, detail=detail)
 
 
 def _build_chat_prompt(message: str, document_keys: list[str]) -> str:
@@ -109,4 +139,4 @@ Call the tool with exactly these field names from the payload: {field_names}.
 """
 
 
-app = create_app(provision_hermes=bool(os.getenv("OPENAI_API_KEY")))
+app = create_app()
