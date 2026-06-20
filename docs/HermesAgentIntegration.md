@@ -31,6 +31,38 @@ http://lightrag-snapshot:9621
 That service is not published to the host. The MCP adapter uses it as the
 default `build_latest_snapshot` target.
 
+## Local Hermes Web UI
+
+Start the Hermes Web UI stack with:
+
+```bash
+docker compose -f docker-compose.hermes.yml up -d --build
+```
+
+Open the UI at:
+
+```text
+http://127.0.0.1:8787
+```
+
+The browser talks to Hermes inside the `hermes-ui` container. That container
+uses `OPENAI_API_KEY` from `.env` and connects to the internal MCP endpoint at:
+
+```text
+http://lightrag-mcp:8765/mcp
+```
+
+The Web UI does not provide delete, clear, reset, or raw LightRAG query
+controls. Ingest creates archived document versions, and search runs through
+the latest-only snapshot workflow described below.
+
+By default, the UI is bound to localhost only at `127.0.0.1:8787`. Its persisted
+Hermes UI home is stored under:
+
+```text
+./data/hermes_ui_home
+```
+
 ## Safety Boundary
 
 The MCP adapter runs in a container and talks to LightRAG over the Docker Compose
