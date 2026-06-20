@@ -8,28 +8,43 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 ENV HERMES_HOME=/app/hermes_home
 
+ARG HERMES_AGENT_REF=1b7b4d138a67dd9a9aa92625cbfeaba4778e68d3
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         git \
+        gosu \
         nodejs \
         npm \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install \
-        fastapi \
-        "uvicorn[standard]" \
-        pydantic \
-        httpx \
-        mcp \
-        PyYAML \
-        "git+https://github.com/NousResearch/hermes-agent.git"
+        "fastapi>=0.111,<1.0" \
+        "uvicorn[standard]>=0.30,<1.0" \
+        "pydantic>=2.7,<3.0" \
+        "httpx>=0.27,<1.0" \
+        "mcp>=1.0,<2.0" \
+        "PyYAML>=6.0,<7.0" \
+        "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_AGENT_REF}"
 
 COPY hermes_ui/ ./hermes_ui/
 
-RUN mkdir -p /app/hermes_home
+RUN groupadd --system --gid 10001 hermes \
+    && useradd --uid 10001 --gid hermes --home-dir /app/hermes_home --shell /usr/sbin/nologin hermes \
+    && mkdir -p /app/hermes_home \
+    && chown -R hermes:hermes /app/hermes_home \
+    && printf '%s\n' \
+        '#!/bin/sh' \
+        'set -eu' \
+        'mkdir -p "${HERMES_HOME}"' \
+        'chown -R hermes:hermes "${HERMES_HOME}" 2>/dev/null || true' \
+        'exec gosu hermes "$@"' \
+        > /usr/local/bin/hermes-ui-entrypoint \
+    && chmod 755 /usr/local/bin/hermes-ui-entrypoint
 
 EXPOSE 8787
 
+ENTRYPOINT ["hermes-ui-entrypoint"]
 CMD ["uvicorn", "hermes_ui.api:app", "--host", "0.0.0.0", "--port", "8787"]
