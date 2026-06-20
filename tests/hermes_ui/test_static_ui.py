@@ -44,6 +44,9 @@ def test_snapshot_panel_exposes_readiness_status() -> None:
     assert "Snapshot target" in snapshot_panel
     assert "Target indexed docs" in snapshot_panel
     assert "Active snapshot" in snapshot_panel
+    assert "Snapshot coverage" in snapshot_panel
+    assert "Some latest documents are searchable. Failed documents need a replacement version." in snapshot_panel
+    assert "Active latest versions" in snapshot_panel
 
 
 def test_maintenance_panel_exposes_snapshot_archive_cleanup() -> None:

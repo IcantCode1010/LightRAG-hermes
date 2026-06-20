@@ -59,7 +59,8 @@ export type SnapshotStatusResponse = {
   needs_rotation?: boolean;
   archived_document_count?: number;
   target_document_count?: number;
-  active_snapshot?: { snapshot_id?: string } | null;
+  latest_versions?: Record<string, string>;
+  active_snapshot?: { snapshot_id?: string; latest_versions?: Record<string, string> } | null;
 };
 
 export type SnapshotArchive = {

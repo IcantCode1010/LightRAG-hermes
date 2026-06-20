@@ -580,6 +580,12 @@ label {
   margin-bottom: 18px;
 }
 
+.snapshot-degraded .badge {
+  border-radius: 6px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .empty-state {
   border: 1px dashed var(--border-strong);
   border-radius: 8px;

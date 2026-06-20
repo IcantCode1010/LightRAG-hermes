@@ -19,6 +19,8 @@ export function SnapshotPanel({
   const canBuild = Boolean(snapshot?.can_build);
   const isCurrent = Boolean(snapshot?.current);
   const targetTone: Tone = canBuild || isCurrent ? "ok" : "warn";
+  const activeLatestCount = Object.keys(snapshot?.active_snapshot?.latest_versions || {}).length;
+  const isDegraded = snapshot?.state === "degraded";
 
   async function buildSnapshot(event: FormEvent) {
     event.preventDefault();
@@ -40,10 +42,17 @@ export function SnapshotPanel({
   return (
     <section className="tool-view" id="snapshot-tab" role="tabpanel" aria-labelledby="snapshot-tab-button">
       <section className="snapshot-readiness" aria-live="polite">
+        {isDegraded && (
+          <div className="status-item snapshot-degraded">
+            <div className="status-label">Snapshot coverage</div>
+            <Badge tone="warn">Some latest documents are searchable. Failed documents need a replacement version.</Badge>
+          </div>
+        )}
         <StatusBadge label="Snapshot target" value={snapshot?.reason || snapshot?.state || "Loading"} tone={targetTone} />
         <StatusBadge label="Archived latest docs" value={String(snapshot?.archived_document_count ?? 0)} tone="ok" />
         <StatusBadge label="Target indexed docs" value={String(snapshot?.target_document_count ?? 0)} tone={targetTone} />
         <StatusBadge label="Active snapshot" value={snapshot?.active_snapshot?.snapshot_id || "None"} tone={snapshot?.active_snapshot ? "ok" : "warn"} />
+        <StatusBadge label="Active latest versions" value={String(activeLatestCount)} tone={activeLatestCount ? "ok" : "warn"} />
       </section>
       <form className="tool-form" onSubmit={buildSnapshot}>
         <label>
