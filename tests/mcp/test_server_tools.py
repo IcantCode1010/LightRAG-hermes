@@ -5,6 +5,7 @@ import pytest
 
 from lightrag_mcp.server import (
     build_adapter_status,
+    build_document_processing_status,
     build_document_state,
     build_ingest_file_version,
     build_ingest_text_version,
@@ -61,6 +62,53 @@ def test_build_list_documents_marks_active_snapshot_searchability(tmp_path: Path
         {"label": "2026-06-19-review", "searchable": False},
         {"label": "2026-07-01-final", "searchable": False},
     ]
+
+
+def test_build_document_processing_status_reports_searchable_failed_and_archived(
+    tmp_path: Path,
+):
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_file_version("airbus", "2026-06-20-001", "airbus.pdf", b"x")
+    registry.write_file_version("boeing", "2026-06-20-001", "boeing.pdf", b"x")
+    registry.write_file_version("boeing", "2026-06-19-001", "boeing.pdf", b"x")
+    active = ActiveSnapshot(
+        snapshot_id="snapshot-2026-06-20.openai-006",
+        base_url="http://snapshot-api:9621",
+        latest_versions={"airbus": "2026-06-20-001"},
+    )
+    target_documents = [
+        {
+            "file_path": "airbus@2026-06-20-001.pdf",
+            "status": "processed",
+            "chunks_count": 42,
+        },
+        {
+            "file_path": "boeing@2026-06-20-001.pdf",
+            "status": "failed",
+            "chunks_count": None,
+            "error_msg": "extracted no usable text",
+        },
+    ]
+
+    result = build_document_processing_status(
+        registry,
+        active_snapshot=active,
+        target_documents=target_documents,
+    )
+
+    assert result["summary"] == {
+        "registered_document_count": 2,
+        "registered_version_count": 3,
+        "searchable_latest_count": 1,
+        "failed_latest_count": 1,
+        "unsearchable_latest_count": 1,
+    }
+    assert result["documents"][0]["document_key"] == "airbus"
+    assert result["documents"][0]["latest"]["state"] == "searchable"
+    assert result["documents"][0]["latest"]["chunks_count"] == 42
+    assert result["documents"][1]["document_key"] == "boeing"
+    assert result["documents"][1]["latest"]["state"] == "failed"
+    assert result["documents"][1]["latest"]["error"] == "extracted no usable text"
 
 
 def test_build_search_documents_matches_key_and_active_snapshot_state(tmp_path: Path):

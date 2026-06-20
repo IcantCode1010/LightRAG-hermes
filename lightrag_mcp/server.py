@@ -69,6 +69,109 @@ def build_list_documents(
     return {"documents": documents}
 
 
+def build_document_processing_status(
+    registry: SourceRegistry,
+    *,
+    active_snapshot: ActiveSnapshot | None,
+    target_documents: list[object],
+) -> dict[str, object]:
+    sources = registry.list_sources()
+    latest = registry.latest_sources()
+    active_versions = active_snapshot.latest_versions if active_snapshot else {}
+    target_by_source = _target_documents_by_source(target_documents)
+    documents: list[dict[str, object]] = []
+    searchable_latest_count = 0
+    failed_latest_count = 0
+    unsearchable_latest_count = 0
+
+    for key in sorted(latest):
+        key_sources = sorted(
+            (source for source in sources if source.document_key == key),
+            key=lambda source: source.version_label,
+        )
+        latest_source = latest[key]
+        version_records = [
+            _processing_version_payload(
+                source,
+                active_version=active_versions.get(key),
+                target_document=target_by_source.get(source.source_name),
+                latest_version=latest_source.version_label,
+            )
+            for source in key_sources
+        ]
+        latest_record = next(
+            record
+            for record in version_records
+            if record["version_label"] == latest_source.version_label
+        )
+        if latest_record["state"] == "searchable":
+            searchable_latest_count += 1
+        else:
+            unsearchable_latest_count += 1
+            if latest_record["state"] == "failed":
+                failed_latest_count += 1
+        documents.append(
+            {
+                "document_key": key,
+                "latest": latest_record,
+                "versions": version_records,
+            }
+        )
+
+    return {
+        "summary": {
+            "registered_document_count": len(latest),
+            "registered_version_count": len(sources),
+            "searchable_latest_count": searchable_latest_count,
+            "failed_latest_count": failed_latest_count,
+            "unsearchable_latest_count": unsearchable_latest_count,
+        },
+        "documents": documents,
+    }
+
+
+def _target_documents_by_source(documents: list[object]) -> dict[str, dict[str, object]]:
+    by_source: dict[str, dict[str, object]] = {}
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        file_path = str(document.get("file_path") or "")
+        if file_path:
+            by_source[file_path] = document
+    return by_source
+
+
+def _processing_version_payload(
+    source,
+    *,
+    active_version: str | None,
+    target_document: dict[str, object] | None,
+    latest_version: str,
+) -> dict[str, object]:
+    status = str((target_document or {}).get("status") or "")
+    chunks_count = (target_document or {}).get("chunks_count")
+    error = str((target_document or {}).get("error_msg") or "")
+    processed = (
+        status == "processed" and isinstance(chunks_count, int) and chunks_count > 0
+    )
+    if active_version == source.version_label and processed:
+        state = "searchable"
+    elif status == "failed":
+        state = "failed"
+    elif source.version_label != latest_version:
+        state = "archived"
+    else:
+        state = "registered"
+    return {
+        "version_label": source.version_label,
+        "source_name": source.source_name,
+        "state": state,
+        "searchable": state == "searchable",
+        "chunks_count": chunks_count if isinstance(chunks_count, int) else None,
+        "error": error,
+    }
+
+
 def _source_payload(
     source,
     *,
@@ -462,6 +565,18 @@ def list_unsearchable_latest(limit: int = 25, offset: int = 0) -> dict[str, obje
         active_snapshot=read_active_snapshot(config.active_snapshot_file),
         limit=limit,
         offset=offset,
+    )
+
+
+@mcp.tool()
+async def document_processing_status() -> dict[str, object]:
+    """Return registry, snapshot, and LightRAG processing state for Hermes UI."""
+    client = LightRAGClient(config.snapshot_base_url, config.api_key)
+    target_documents = (await client.documents()).get("documents") or []
+    return build_document_processing_status(
+        SourceRegistry(config.source_dir),
+        active_snapshot=read_active_snapshot(config.active_snapshot_file),
+        target_documents=target_documents,
     )
 
 
