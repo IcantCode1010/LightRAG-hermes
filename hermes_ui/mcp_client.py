@@ -60,6 +60,26 @@ def normalize_status(adapter: dict[str, Any], pipeline: dict[str, Any]) -> dict[
     }
 
 
+def normalize_snapshot_status(payload: dict[str, Any]) -> dict[str, Any]:
+    active_snapshot = _value(payload, "active_snapshot")
+    normalized_active = None
+    if isinstance(active_snapshot, dict):
+        normalized_active = {
+            "snapshot_id": active_snapshot.get("snapshot_id"),
+            "latest_versions": dict(active_snapshot.get("latest_versions") or {}),
+        }
+
+    return {
+        "state": str(_value(payload, "state", "unknown")),
+        "archived_document_count": int(_value(payload, "archived_document_count", 0)),
+        "target_document_count": int(_value(payload, "target_document_count", 0)),
+        "can_build": bool(_value(payload, "can_build", False)),
+        "reason": str(_value(payload, "reason", "")),
+        "latest_versions": dict(_value(payload, "latest_versions", {}) or {}),
+        "active_snapshot": normalized_active,
+    }
+
+
 async def call_tool(
     mcp_url: str,
     tool_name: str,
@@ -99,3 +119,7 @@ async def get_status(mcp_url: str) -> dict[str, Any]:
     adapter = await call_tool(mcp_url, "adapter_status")
     pipeline = await call_tool(mcp_url, "get_pipeline_status")
     return normalize_status(adapter, pipeline)
+
+
+async def get_snapshot_status(mcp_url: str) -> dict[str, Any]:
+    return normalize_snapshot_status(await call_tool(mcp_url, "snapshot_status"))

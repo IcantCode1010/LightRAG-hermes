@@ -135,6 +135,11 @@ document key into a clean LightRAG snapshot endpoint. The tool activates the
 snapshot only after every latest source has been accepted by that endpoint. If
 any insert fails, the previous `active.json` pointer is left unchanged.
 
+Use `snapshot_status` or the Web UI Snapshot tab before building. It reports the
+number of archived latest document keys, the active snapshot pointer, and whether
+the target snapshot endpoint is empty enough to build safely. The Web UI disables
+the build action while the target contains indexed documents.
+
 Before inserting, the adapter checks the target snapshot endpoint for existing
 documents. If any are present, `build_latest_snapshot` refuses to run. This
 prevents accidentally mixing a new latest-only generation with a previous
@@ -179,6 +184,7 @@ The initial adapter exposes:
 - `ingest_file_version`
 - `ingest_text_version`
 - `build_latest_snapshot`
+- `snapshot_status`
 - `query_latest_all`
 - `query_latest_documents`
 

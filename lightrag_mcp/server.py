@@ -9,6 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from lightrag_mcp.client import LightRAGClient
 from lightrag_mcp.config import MCPConfig
 from lightrag_mcp.snapshots import (
+    ActiveSnapshot,
     LatestSnapshotBuilder,
     SourceRegistry,
     read_active_snapshot,
@@ -173,6 +174,46 @@ async def build_latest_snapshot_with_client(
     }
 
 
+async def build_snapshot_status_with_client(
+    *,
+    registry: SourceRegistry,
+    active_snapshot_file: Path,
+    snapshot_base_url: str,
+    client,
+) -> dict[str, object]:
+    latest = registry.latest_sources()
+    target_documents = await client.documents()
+    target_count = len(target_documents.get("documents") or [])
+    can_build = target_count == 0
+    active = read_active_snapshot(active_snapshot_file)
+    return {
+        "state": "ready" if can_build else "blocked",
+        "snapshot_base_url": snapshot_base_url,
+        "archived_document_count": len(latest),
+        "latest_versions": {
+            key: source.version_label for key, source in sorted(latest.items())
+        },
+        "active_snapshot": _snapshot_payload(active),
+        "target_document_count": target_count,
+        "can_build": can_build,
+        "reason": (
+            "Snapshot target is empty."
+            if can_build
+            else "Rotate or archive snapshot target storage before building."
+        ),
+    }
+
+
+def _snapshot_payload(snapshot: ActiveSnapshot | None) -> dict[str, object] | None:
+    if snapshot is None:
+        return None
+    return {
+        "snapshot_id": snapshot.snapshot_id,
+        "base_url": snapshot.base_url,
+        "latest_versions": snapshot.latest_versions,
+    }
+
+
 @mcp.tool()
 def adapter_status() -> dict[str, str]:
     """Return adapter configuration that is safe to expose to Hermes."""
@@ -267,6 +308,17 @@ async def build_latest_snapshot(
         snapshot_id=snapshot_id,
         snapshot_base_url=target_base_url,
         client=LightRAGClient(target_base_url, config.api_key),
+    )
+
+
+@mcp.tool()
+async def snapshot_status() -> dict[str, object]:
+    """Report whether the latest-only snapshot target is ready to build."""
+    return await build_snapshot_status_with_client(
+        registry=SourceRegistry(config.source_dir),
+        active_snapshot_file=config.active_snapshot_file,
+        snapshot_base_url=config.snapshot_base_url,
+        client=LightRAGClient(config.snapshot_base_url, config.api_key),
     )
 
 

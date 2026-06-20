@@ -13,6 +13,7 @@ HERMES_TOOLS = [
     "query_latest_all",
     "query_latest_documents",
     "build_latest_snapshot",
+    "snapshot_status",
     "get_pipeline_status",
 ]
 

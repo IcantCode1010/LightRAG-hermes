@@ -2,6 +2,7 @@ const state = {
   documents: [],
   pending: Object.create(null),
   selectedFile: null,
+  snapshotCanBuild: false,
 };
 
 const elements = {
@@ -15,6 +16,7 @@ const elements = {
   ingestForm: document.querySelector("#ingest-form"),
   documentFile: document.querySelector("#document-file"),
   snapshotForm: document.querySelector("#snapshot-form"),
+  snapshotStatus: document.querySelector("#snapshot-status"),
   versionLabel: document.querySelector("#version-label"),
   snapshotId: document.querySelector("#snapshot-id"),
 };
@@ -36,16 +38,19 @@ elements.snapshotId.value = `snapshot-${datePart()}.001`;
 
 renderStatus();
 renderDocuments();
+renderSnapshotStatus();
 addMessage("system", "Ready. Status and document registry are loading.");
 refresh().catch((error) => addMessage("system", formatError(error)));
 
 async function refresh() {
   return withPending("refresh", [elements.refresh], async () => {
-    const [status, docs] = await Promise.all([
+    const [status, docs, snapshot] = await Promise.all([
       api("/api/status"),
       api("/api/documents"),
+      api("/api/snapshots/status"),
     ]);
     renderStatus(status);
+    renderSnapshotStatus(snapshot);
     state.documents = Array.isArray(docs.documents) ? docs.documents : [];
     renderDocuments();
   });
@@ -279,6 +284,28 @@ function renderDocuments() {
   });
 
   elements.documents.replaceChildren(...rows);
+}
+
+function renderSnapshotStatus(snapshot = null) {
+  if (!elements.snapshotStatus) {
+    return;
+  }
+  if (!snapshot) {
+    elements.snapshotStatus.replaceChildren(statusItem("Snapshot target", "Loading", "warn"));
+    return;
+  }
+
+  const targetTone = snapshot.can_build ? "ok" : "warn";
+  const active = snapshot.active_snapshot;
+  const activeLabel = active && active.snapshot_id ? active.snapshot_id : "None";
+  state.snapshotCanBuild = Boolean(snapshot.can_build);
+  elements.snapshotForm.querySelector("button").disabled = !state.snapshotCanBuild;
+  elements.snapshotStatus.replaceChildren(
+    statusItem("Snapshot target", snapshot.reason || snapshot.state || "unknown", targetTone),
+    statusItem("Archived latest docs", String(snapshot.archived_document_count ?? 0), "ok"),
+    statusItem("Target indexed docs", String(snapshot.target_document_count ?? 0), targetTone),
+    statusItem("Active snapshot", activeLabel, active ? "ok" : "warn"),
+  );
 }
 
 function statusItem(label, value, tone) {

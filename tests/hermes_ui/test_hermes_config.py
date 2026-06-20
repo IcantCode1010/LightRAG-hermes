@@ -98,6 +98,7 @@ def test_ensure_hermes_home_writes_openai_key_and_mcp_config(tmp_path, monkeypat
         "query_latest_all",
         "query_latest_documents",
         "build_latest_snapshot",
+        "snapshot_status",
         "get_pipeline_status",
     ]
 

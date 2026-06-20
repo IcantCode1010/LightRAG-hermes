@@ -29,6 +29,32 @@ def _client(tmp_path: Path, **kwargs) -> TestClient:
     return TestClient(app)
 
 
+def test_snapshot_status_returns_reader_json(tmp_path):
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "ready",
+            "can_build": True,
+            "archived_document_count": 2,
+            "target_document_count": 0,
+            "reason": "Snapshot target is empty.",
+            "mcp_url": mcp_url,
+        }
+
+    client = _client(tmp_path, snapshot_reader=snapshot_reader)
+
+    response = client.get("/api/snapshots/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "state": "ready",
+        "can_build": True,
+        "archived_document_count": 2,
+        "target_document_count": 0,
+        "reason": "Snapshot target is empty.",
+        "mcp_url": "http://mcp.local:8765/mcp",
+    }
+
+
 def test_ingest_file_calls_mcp_tool_with_base64_payload(tmp_path, monkeypatch):
     calls = []
 

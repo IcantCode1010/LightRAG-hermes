@@ -5,7 +5,11 @@ import json
 import pytest
 
 from hermes_ui import mcp_client
-from hermes_ui.mcp_client import normalize_documents, normalize_status
+from hermes_ui.mcp_client import (
+    normalize_documents,
+    normalize_snapshot_status,
+    normalize_status,
+)
 
 
 def test_normalize_documents_marks_latest_version() -> None:
@@ -58,6 +62,38 @@ def test_normalize_status_redacts_adapter_paths_and_coerces_pipeline_values() ->
         "state": "ok",
         "mcp": {"status": "ok", "base_url": "http://lightrag-api:9621"},
         "pipeline": {"busy": True, "docs": 2},
+    }
+
+
+def test_normalize_snapshot_status_redacts_urls_and_coerces_counts() -> None:
+    result = normalize_snapshot_status(
+        {
+            "state": "blocked",
+            "snapshot_base_url": "http://snapshot-api:9621",
+            "archived_document_count": "3",
+            "target_document_count": "2",
+            "can_build": False,
+            "reason": "Rotate or archive snapshot target storage.",
+            "latest_versions": {"policy": "2026-06-20-001"},
+            "active_snapshot": {
+                "snapshot_id": "snapshot-1",
+                "base_url": "http://snapshot-api:9621",
+                "latest_versions": {"policy": "2026-06-19-001"},
+            },
+        }
+    )
+
+    assert result == {
+        "state": "blocked",
+        "archived_document_count": 3,
+        "target_document_count": 2,
+        "can_build": False,
+        "reason": "Rotate or archive snapshot target storage.",
+        "latest_versions": {"policy": "2026-06-20-001"},
+        "active_snapshot": {
+            "snapshot_id": "snapshot-1",
+            "latest_versions": {"policy": "2026-06-19-001"},
+        },
     }
 
 

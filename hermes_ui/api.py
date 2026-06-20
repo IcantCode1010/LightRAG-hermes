@@ -17,12 +17,18 @@ from hermes_ui.hermes_runner import (
     build_snapshot_prompt,
     run_hermes_query,
 )
-from hermes_ui.mcp_client import call_tool, get_documents, get_status
+from hermes_ui.mcp_client import (
+    call_tool,
+    get_documents,
+    get_snapshot_status,
+    get_status,
+)
 
 
 HermesRunner = Callable[[str, HermesUISettings], Awaitable[dict[str, Any]]]
 StatusReader = Callable[[str], Awaitable[dict[str, Any]]]
 DocumentReader = Callable[[str], Awaitable[dict[str, Any]]]
+SnapshotReader = Callable[[str], Awaitable[dict[str, Any]]]
 
 
 class ChatRequest(BaseModel):
@@ -46,6 +52,7 @@ def create_app(
     hermes_runner: HermesRunner = run_hermes_query,
     status_reader: StatusReader = get_status,
     document_reader: DocumentReader = get_documents,
+    snapshot_reader: SnapshotReader = get_snapshot_status,
     provision_hermes: bool = True,
 ) -> FastAPI:
     settings = settings or HermesUISettings()
@@ -79,6 +86,10 @@ def create_app(
     @app.get("/api/documents")
     async def api_documents() -> dict[str, Any]:
         return await document_reader(settings.mcp_url)
+
+    @app.get("/api/snapshots/status")
+    async def api_snapshot_status() -> dict[str, Any]:
+        return await snapshot_reader(settings.mcp_url)
 
     @app.post("/api/chat")
     async def api_chat(request: ChatRequest) -> dict[str, Any]:

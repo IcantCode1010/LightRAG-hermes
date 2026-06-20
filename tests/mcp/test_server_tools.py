@@ -8,6 +8,7 @@ from lightrag_mcp.server import (
     build_ingest_file_version,
     build_ingest_text_version,
     build_list_documents,
+    build_snapshot_status_with_client,
     build_selected_document_query,
     build_latest_snapshot_with_client,
     query_latest_all_with_client,
@@ -204,3 +205,69 @@ async def test_build_latest_snapshot_with_client_activates_after_latest_inserts(
     assert result["snapshot_id"] == "snapshot_20260701"
     assert result["latest_versions"] == {"handbook": "2026-07-01-final"}
     assert client.sources == ["handbook@2026-07-01-final.md"]
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_status_reports_clean_target_and_active_snapshot(
+    tmp_path: Path,
+):
+    class FakeClient:
+        async def documents(self):
+            return {"documents": []}
+
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_text_version("handbook", "2026-07-01-final", "A", "new")
+    active_path = tmp_path / "active.json"
+    write_active_snapshot(
+        active_path,
+        ActiveSnapshot(
+            snapshot_id="snapshot-2026-07-01",
+            base_url="http://snapshot-api:9621",
+            latest_versions={"handbook": "2026-07-01-final"},
+        ),
+    )
+
+    result = await build_snapshot_status_with_client(
+        registry=registry,
+        active_snapshot_file=active_path,
+        snapshot_base_url="http://snapshot-api:9621",
+        client=FakeClient(),
+    )
+
+    assert result == {
+        "state": "ready",
+        "snapshot_base_url": "http://snapshot-api:9621",
+        "archived_document_count": 1,
+        "latest_versions": {"handbook": "2026-07-01-final"},
+        "active_snapshot": {
+            "snapshot_id": "snapshot-2026-07-01",
+            "base_url": "http://snapshot-api:9621",
+            "latest_versions": {"handbook": "2026-07-01-final"},
+        },
+        "target_document_count": 0,
+        "can_build": True,
+        "reason": "Snapshot target is empty.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_status_blocks_when_target_contains_documents(
+    tmp_path: Path,
+):
+    class FakeClient:
+        async def documents(self):
+            return {"documents": [{"id": "existing"}]}
+
+    registry = SourceRegistry(tmp_path / "sources")
+
+    result = await build_snapshot_status_with_client(
+        registry=registry,
+        active_snapshot_file=tmp_path / "missing.json",
+        snapshot_base_url="http://snapshot-api:9621",
+        client=FakeClient(),
+    )
+
+    assert result["state"] == "blocked"
+    assert result["target_document_count"] == 1
+    assert result["can_build"] is False
+    assert "Rotate or archive" in result["reason"]
