@@ -338,6 +338,8 @@ async def test_build_snapshot_status_reports_clean_target_and_active_snapshot(
         },
         "target_document_count": 0,
         "can_build": True,
+        "current": False,
+        "needs_rotation": False,
         "reason": "Snapshot target is empty.",
     }
 
@@ -362,4 +364,76 @@ async def test_build_snapshot_status_blocks_when_target_contains_documents(
     assert result["state"] == "blocked"
     assert result["target_document_count"] == 1
     assert result["can_build"] is False
+    assert "Rotate or archive" in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_status_reports_current_when_active_matches_latest(
+    tmp_path: Path,
+):
+    class FakeClient:
+        async def documents(self):
+            return {"documents": [{"id": "handbook"}]}
+
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_text_version("handbook", "2026-07-01-final", "A", "new")
+    active_path = tmp_path / "active.json"
+    write_active_snapshot(
+        active_path,
+        ActiveSnapshot(
+            snapshot_id="snapshot-2026-07-01",
+            base_url="http://snapshot-api:9621",
+            latest_versions={"handbook": "2026-07-01-final"},
+        ),
+    )
+
+    result = await build_snapshot_status_with_client(
+        registry=registry,
+        active_snapshot_file=active_path,
+        snapshot_base_url="http://snapshot-api:9621",
+        client=FakeClient(),
+    )
+
+    assert result["state"] == "current"
+    assert result["target_document_count"] == 1
+    assert result["can_build"] is False
+    assert result["current"] is True
+    assert result["needs_rotation"] is False
+    assert result["reason"] == (
+        "Active snapshot is current. Rotate snapshot target storage only before "
+        "building the next replacement snapshot."
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_snapshot_status_blocks_when_active_is_missing_latest_version(
+    tmp_path: Path,
+):
+    class FakeClient:
+        async def documents(self):
+            return {"documents": [{"id": "handbook"}]}
+
+    registry = SourceRegistry(tmp_path / "sources")
+    registry.write_text_version("handbook", "2026-07-01-final", "A", "new")
+    active_path = tmp_path / "active.json"
+    write_active_snapshot(
+        active_path,
+        ActiveSnapshot(
+            snapshot_id="snapshot-2026-06-30",
+            base_url="http://snapshot-api:9621",
+            latest_versions={"handbook": "2026-06-30-draft"},
+        ),
+    )
+
+    result = await build_snapshot_status_with_client(
+        registry=registry,
+        active_snapshot_file=active_path,
+        snapshot_base_url="http://snapshot-api:9621",
+        client=FakeClient(),
+    )
+
+    assert result["state"] == "blocked"
+    assert result["can_build"] is False
+    assert result["current"] is False
+    assert result["needs_rotation"] is True
     assert "Rotate or archive" in result["reason"]

@@ -28,14 +28,24 @@ def normalize_documents(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(raw_versions, list):
             raw_versions = []
 
+        versions = []
+        for version in raw_versions:
+            if isinstance(version, dict):
+                label = version.get("label")
+                versions.append(
+                    {
+                        "label": label,
+                        "searchable": bool(version.get("searchable", label == latest)),
+                    }
+                )
+            else:
+                versions.append({"label": version, "searchable": version == latest})
+
         documents.append(
             {
                 "document_key": document.get("document_key"),
                 "latest_version_label": latest,
-                "versions": [
-                    {"label": version, "searchable": version == latest}
-                    for version in raw_versions
-                ],
+                "versions": versions,
             }
         )
 
@@ -74,6 +84,8 @@ def normalize_snapshot_status(payload: dict[str, Any]) -> dict[str, Any]:
         "archived_document_count": int(_value(payload, "archived_document_count", 0)),
         "target_document_count": int(_value(payload, "target_document_count", 0)),
         "can_build": bool(_value(payload, "can_build", False)),
+        "current": bool(_value(payload, "current", False)),
+        "needs_rotation": bool(_value(payload, "needs_rotation", False)),
         "reason": str(_value(payload, "reason", "")),
         "latest_versions": dict(_value(payload, "latest_versions", {}) or {}),
         "active_snapshot": normalized_active,

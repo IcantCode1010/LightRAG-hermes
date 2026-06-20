@@ -39,6 +39,36 @@ def test_normalize_documents_marks_latest_version() -> None:
     }
 
 
+def test_normalize_documents_preserves_version_searchability_payload() -> None:
+    payload = {
+        "documents": [
+            {
+                "document_key": "policy",
+                "versions": [
+                    {"label": "2026-06-19-001", "searchable": True},
+                    {"label": "2026-06-20-001", "searchable": False},
+                ],
+                "latest_version_label": "2026-06-20-001",
+            }
+        ]
+    }
+
+    result = normalize_documents(payload)
+
+    assert result == {
+        "documents": [
+            {
+                "document_key": "policy",
+                "latest_version_label": "2026-06-20-001",
+                "versions": [
+                    {"label": "2026-06-19-001", "searchable": True},
+                    {"label": "2026-06-20-001", "searchable": False},
+                ],
+            }
+        ]
+    }
+
+
 def test_normalize_documents_handles_empty_payload() -> None:
     assert normalize_documents({}) == {"documents": []}
 
@@ -73,6 +103,8 @@ def test_normalize_snapshot_status_redacts_urls_and_coerces_counts() -> None:
             "archived_document_count": "3",
             "target_document_count": "2",
             "can_build": False,
+            "current": True,
+            "needs_rotation": False,
             "reason": "Rotate or archive snapshot target storage.",
             "latest_versions": {"policy": "2026-06-20-001"},
             "active_snapshot": {
@@ -88,6 +120,8 @@ def test_normalize_snapshot_status_redacts_urls_and_coerces_counts() -> None:
         "archived_document_count": 3,
         "target_document_count": 2,
         "can_build": False,
+        "current": True,
+        "needs_rotation": False,
         "reason": "Rotate or archive snapshot target storage.",
         "latest_versions": {"policy": "2026-06-20-001"},
         "active_snapshot": {

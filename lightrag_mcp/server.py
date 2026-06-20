@@ -301,25 +301,39 @@ async def build_snapshot_status_with_client(
     client,
 ) -> dict[str, object]:
     latest = registry.latest_sources()
+    latest_versions = {
+        key: source.version_label for key, source in sorted(latest.items())
+    }
     target_documents = await client.documents()
     target_count = len(target_documents.get("documents") or [])
-    can_build = target_count == 0
     active = read_active_snapshot(active_snapshot_file)
+    active_versions = active.latest_versions if active is not None else {}
+    can_build = target_count == 0
+    current = target_count > 0 and active is not None and active_versions == latest_versions
+    needs_rotation = target_count > 0 and not current
+    if current:
+        state = "current"
+        reason = (
+            "Active snapshot is current. Rotate snapshot target storage only before "
+            "building the next replacement snapshot."
+        )
+    elif can_build:
+        state = "ready"
+        reason = "Snapshot target is empty."
+    else:
+        state = "blocked"
+        reason = "Rotate or archive snapshot target storage before building."
     return {
-        "state": "ready" if can_build else "blocked",
+        "state": state,
         "snapshot_base_url": snapshot_base_url,
         "archived_document_count": len(latest),
-        "latest_versions": {
-            key: source.version_label for key, source in sorted(latest.items())
-        },
+        "latest_versions": latest_versions,
         "active_snapshot": _snapshot_payload(active),
         "target_document_count": target_count,
         "can_build": can_build,
-        "reason": (
-            "Snapshot target is empty."
-            if can_build
-            else "Rotate or archive snapshot target storage before building."
-        ),
+        "current": current,
+        "needs_rotation": needs_rotation,
+        "reason": reason,
     }
 
 
