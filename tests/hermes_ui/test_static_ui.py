@@ -50,3 +50,6 @@ def test_chat_flow_exposes_activity_indicator_and_scheduled_scroll() -> None:
     assert "scrollMessagesToBottom" in js
     assert "requestAnimationFrame" in js
     assert ".chat-activity" in css
+    assert "typing-dots" in html
+    assert "typing-dot" in html
+    assert "@keyframes typingPulse" in css

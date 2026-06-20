@@ -31,7 +31,14 @@
           id="chat-activity"
           aria-live="polite"
           hidden
-        >Hermes is typing...</div>
+        >
+          <span class="typing-dots" aria-hidden="true">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+          </span>
+          <span>Hermes is typing...</span>
+        </div>
 
         <form class="composer" id="chat-form">
           <label class="visually-hidden" for="chat-message">Message</label>
