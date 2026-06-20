@@ -225,6 +225,19 @@ h3 {
   padding: 18px;
 }
 
+.chat-activity {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 8px 18px;
+}
+
+.chat-activity[hidden] {
+  display: none;
+}
+
 .message {
   display: grid;
   gap: 6px;

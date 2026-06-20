@@ -13,6 +13,7 @@ const elements = {
   snapshotArchives: document.querySelector("#snapshot-archives"),
   archiveCount: document.querySelector("#archive-count"),
   messages: document.querySelector("#messages"),
+  chatActivity: document.querySelector("#chat-activity"),
   refresh: document.querySelector("#refresh"),
   chatForm: document.querySelector("#chat-form"),
   chatMessage: document.querySelector("#chat-message"),
@@ -78,6 +79,7 @@ async function sendChat(event) {
   addMessage("user", message);
 
   await withPending("chat", [elements.chatForm.querySelector("button")], async () => {
+    setChatActivity(true);
     try {
       const response = await api("/api/chat", {
         method: "POST",
@@ -86,6 +88,8 @@ async function sendChat(event) {
       addMessage("agent", responseText(response, "Hermes returned an empty response."));
     } catch (error) {
       addMessage("system", formatError(error));
+    } finally {
+      setChatActivity(false);
     }
   });
 }
@@ -416,7 +420,23 @@ function addMessage(role, text) {
 
   node.append(roleEl, textEl);
   elements.messages.append(node);
-  elements.messages.scrollTop = elements.messages.scrollHeight;
+  scrollMessagesToBottom();
+}
+
+function setChatActivity(isActive) {
+  if (!elements.chatActivity) {
+    return;
+  }
+  elements.chatActivity.hidden = !isActive;
+  if (isActive) {
+    scrollMessagesToBottom();
+  }
+}
+
+function scrollMessagesToBottom() {
+  requestAnimationFrame(() => {
+    elements.messages.scrollTop = elements.messages.scrollHeight;
+  });
 }
 
 function selectTab(tabName) {
