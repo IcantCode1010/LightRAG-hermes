@@ -23,6 +23,34 @@ export type DocumentsResponse = {
   documents?: DocumentRecord[];
 };
 
+export type DocumentProcessingVersion = {
+  version_label?: string;
+  source_name?: string;
+  state?: "searchable" | "failed" | "archived" | "registered" | string;
+  searchable?: boolean;
+  chunks_count?: number | null;
+  error?: string;
+};
+
+export type DocumentProcessingRecord = {
+  document_key?: string;
+  latest?: DocumentProcessingVersion;
+  versions?: DocumentProcessingVersion[];
+};
+
+export type DocumentProcessingSummary = {
+  registered_document_count?: number;
+  registered_version_count?: number;
+  searchable_latest_count?: number;
+  failed_latest_count?: number;
+  unsearchable_latest_count?: number;
+};
+
+export type DocumentProcessingStatus = {
+  summary?: DocumentProcessingSummary;
+  documents?: DocumentProcessingRecord[];
+};
+
 export type SnapshotStatusResponse = {
   state?: string;
   reason?: string;

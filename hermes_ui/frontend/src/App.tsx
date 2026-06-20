@@ -10,6 +10,7 @@ import { StatusPanel } from "@/components/StatusPanel";
 import { api } from "@/lib/api";
 import type {
   ChatMessage,
+  DocumentProcessingStatus,
   DocumentRecord,
   DocumentsResponse,
   SnapshotArchive,
@@ -24,6 +25,7 @@ export default function App() {
   ]);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documentProcessing, setDocumentProcessing] = useState<DocumentProcessingStatus | null>(null);
   const [snapshot, setSnapshot] = useState<SnapshotStatusResponse | null>(null);
   const [archives, setArchives] = useState<SnapshotArchive[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -36,14 +38,16 @@ export default function App() {
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [statusPayload, documentPayload, snapshotPayload, archivePayload] = await Promise.all([
+      const [statusPayload, documentPayload, documentProcessingPayload, snapshotPayload, archivePayload] = await Promise.all([
         api<StatusResponse>("/api/status"),
         api<DocumentsResponse>("/api/documents"),
+        api<DocumentProcessingStatus>("/api/documents/status"),
         api<SnapshotStatusResponse>("/api/snapshots/status"),
         api<SnapshotArchivesResponse>("/api/maintenance/snapshot-archives"),
       ]);
       setStatus(statusPayload);
       setDocuments(Array.isArray(documentPayload.documents) ? documentPayload.documents : []);
+      setDocumentProcessing(documentProcessingPayload);
       setSnapshot(snapshotPayload);
       setArchives(Array.isArray(archivePayload.archives) ? archivePayload.archives : []);
     } catch (error) {
@@ -102,7 +106,12 @@ export default function App() {
         </nav>
 
         {activeTab === "documents" && (
-          <DocumentsPanel addMessage={addMessage} documents={documents} refresh={refresh} />
+          <DocumentsPanel
+            addMessage={addMessage}
+            documents={documents}
+            processingStatus={documentProcessing}
+            refresh={refresh}
+          />
         )}
         {activeTab === "snapshot" && (
           <SnapshotPanel addMessage={addMessage} refresh={refresh} snapshot={snapshot} />

@@ -5,15 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiForm, responseText } from "@/lib/api";
-import type { ChatMessage, DocumentRecord } from "@/types";
+import type { ChatMessage, DocumentProcessingRecord, DocumentProcessingStatus, DocumentRecord, Tone } from "@/types";
 
 export function DocumentsPanel({
   addMessage,
   documents,
+  processingStatus,
   refresh,
 }: {
   addMessage: (role: ChatMessage["role"], text: string) => void;
   documents: DocumentRecord[];
+  processingStatus: DocumentProcessingStatus | null;
   refresh: () => Promise<void>;
 }) {
   const [documentKey, setDocumentKey] = useState("");
@@ -115,6 +117,16 @@ export function DocumentsPanel({
         <Button disabled={isPending} type="submit">Ingest version</Button>
       </form>
 
+      <ProcessingStatusSection
+        onUploadReplacement={(documentRecord) => {
+          setDocumentKey(documentRecord.document_key || "");
+          setTitle(titleFromFilename(documentRecord.document_key || "Document"));
+          setVersionLabel(`${datePart()}-001`);
+          addMessage("system", `Ready to upload a replacement version for ${documentRecord.document_key || "this document"}.`);
+        }}
+        processingStatus={processingStatus}
+      />
+
       <section className="registry-section" aria-label="Document registry">
         <div className="section-heading">
           <h3>Document registry</h3>
@@ -129,6 +141,97 @@ export function DocumentsPanel({
         </div>
       </section>
     </section>
+  );
+}
+
+function ProcessingStatusSection({
+  onUploadReplacement,
+  processingStatus,
+}: {
+  onUploadReplacement: (documentRecord: DocumentProcessingRecord) => void;
+  processingStatus: DocumentProcessingStatus | null;
+}) {
+  const summary = processingStatus?.summary || {};
+  const processingDocuments = Array.isArray(processingStatus?.documents) ? processingStatus.documents : [];
+  return (
+    <section className="processing-section" aria-label="Document processing status">
+      <div className="section-heading">
+        <h3>Processing status</h3>
+        <span className="meta">Latest versions only</span>
+      </div>
+      <div className="summary-grid" aria-label="Document processing summary">
+        <StatusMetric label="Registered" value={summary.registered_document_count} />
+        <StatusMetric label="Searchable" tone="ok" value={summary.searchable_latest_count} />
+        <StatusMetric label="Failed" tone={summary.failed_latest_count ? "error" : undefined} value={summary.failed_latest_count} />
+        <StatusMetric label="Needs snapshot" tone={summary.unsearchable_latest_count ? "warn" : undefined} value={summary.unsearchable_latest_count} />
+      </div>
+      <div className="registry processing-registry" aria-live="polite">
+        {processingDocuments.length === 0 ? (
+          <div className="empty-state">No processing status has been reported yet.</div>
+        ) : (
+          processingDocuments.map((documentRecord) => (
+            <ProcessingRow
+              documentRecord={documentRecord}
+              key={documentRecord.document_key}
+              onUploadReplacement={onUploadReplacement}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StatusMetric({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone?: Tone;
+  value?: number;
+}) {
+  return (
+    <div className="status-metric">
+      <span className="status-metric-value">{value ?? 0}</span>
+      <Badge tone={tone}>{label}</Badge>
+    </div>
+  );
+}
+
+function ProcessingRow({
+  documentRecord,
+  onUploadReplacement,
+}: {
+  documentRecord: DocumentProcessingRecord;
+  onUploadReplacement: (documentRecord: DocumentProcessingRecord) => void;
+}) {
+  const latest = documentRecord.latest || {};
+  const state = latest.state || "registered";
+  const stateLabel = latest.searchable ? "searchable" : state;
+  const tone = statusTone(stateLabel);
+  return (
+    <article className={`doc-row processing-row processing-row-${stateLabel}`}>
+      <div className="doc-row-header">
+        <div>
+          <div className="doc-key">{documentRecord.document_key || "untitled"}</div>
+          <p className="meta">{latest.source_name || "No source file recorded"}</p>
+        </div>
+        <Badge tone={tone}>{stateLabel}</Badge>
+      </div>
+      <div className="version-list">
+        <Badge tone={latest.searchable ? "ok" : undefined}>latest {latest.version_label || "unknown"}</Badge>
+        {typeof latest.chunks_count === "number" && <Badge>{latest.chunks_count} chunks</Badge>}
+      </div>
+      {stateLabel === "failed" && (
+        <div className="processing-action">
+          <p className="note">{latest.error || "LightRAG could not extract usable text from this latest version."}</p>
+          <Button onClick={() => onUploadReplacement(documentRecord)} type="button" variant="secondary">
+            Upload replacement version
+          </Button>
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -160,6 +263,19 @@ function ingestSelectedFile(file: File, documentKey: string, versionLabel: strin
   formData.append("build_snapshot", String(buildSnapshot));
   formData.append("file", file, file.name);
   return apiForm<unknown>("/api/ingest-file", formData);
+}
+
+function statusTone(state: string): Tone | undefined {
+  if (state === "searchable") {
+    return "ok";
+  }
+  if (state === "failed") {
+    return "error";
+  }
+  if (state === "registered") {
+    return "warn";
+  }
+  return undefined;
 }
 
 function datePart() {

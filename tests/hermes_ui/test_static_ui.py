@@ -8,10 +8,13 @@ DOCKERFILE = Path(__file__).resolve().parents[2] / "Dockerfile.hermes-ui"
 
 
 def test_documents_panel_exposes_file_loader_for_ingest_form() -> None:
+    app = (FRONTEND_SRC / "App.tsx").read_text(encoding="utf-8")
     documents_panel = (FRONTEND_SRC / "components" / "DocumentsPanel.tsx").read_text(
         encoding="utf-8"
     )
 
+    assert "/api/documents/status" in app
+    assert "processingStatus" in app
     assert ".pdf" in documents_panel
     assert ".docx" in documents_panel
     assert "Choose file" in documents_panel
@@ -21,6 +24,14 @@ def test_documents_panel_exposes_file_loader_for_ingest_form() -> None:
     assert "file.text()" in documents_panel
     assert "build_snapshot" in documents_panel
     assert "Build searchable snapshot after upload" in documents_panel
+    assert "Processing status" in documents_panel
+    assert "Latest versions only" in documents_panel
+    assert "Registered" in documents_panel
+    assert "Searchable" in documents_panel
+    assert "Failed" in documents_panel
+    assert "Needs snapshot" in documents_panel
+    assert "Upload replacement version" in documents_panel
+    assert "chunks" in documents_panel
 
 
 def test_snapshot_panel_exposes_readiness_status() -> None:
