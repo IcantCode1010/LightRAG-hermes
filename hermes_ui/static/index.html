@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hermes Local Web UI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="status-sidebar" aria-label="Service status">
+        <header class="region-header">
+          <p class="eyebrow">Hermes Local</p>
+          <h1>Operations</h1>
+        </header>
+        <section class="status-stack" id="status" aria-live="polite"></section>
+      </aside>
+
+      <section class="chat-panel" aria-label="Hermes chat">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Hermes Chat</p>
+            <h2>Latest document answers</h2>
+          </div>
+          <button class="secondary-button" id="refresh" type="button">Refresh</button>
+        </header>
+
+        <div class="messages" id="messages" aria-live="polite"></div>
+
+        <form class="composer" id="chat-form">
+          <label class="visually-hidden" for="chat-message">Message</label>
+          <textarea
+            id="chat-message"
+            name="message"
+            placeholder="Ask Hermes about the latest indexed documents."
+            rows="4"
+            required
+          ></textarea>
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <aside class="tools-panel" aria-label="Tools">
+        <nav class="tabs" aria-label="Tool views">
+          <button class="tab is-active" data-tab="documents" type="button">Documents</button>
+          <button class="tab" data-tab="snapshot" type="button">Snapshot</button>
+        </nav>
+
+        <section class="tool-view" id="documents-tab">
+          <form class="tool-form" id="ingest-form">
+            <label for="document-key">
+              <span>Document key</span>
+              <input id="document-key" name="document_key" autocomplete="off" required />
+            </label>
+            <label for="version-label">
+              <span>Version label</span>
+              <input
+                id="version-label"
+                name="version_label"
+                autocomplete="off"
+                pattern="^v\d{4}\.\d{2}\.\d{2}\.\d{3}$"
+                title="Use vYYYY.MM.DD.NNN, for example v2026.06.20.001"
+                required
+              />
+            </label>
+            <label for="title">
+              <span>Title</span>
+              <input id="title" name="title" autocomplete="off" required />
+            </label>
+            <label for="document-text">
+              <span>Text</span>
+              <textarea id="document-text" name="text" rows="8" required></textarea>
+            </label>
+            <button type="submit">Ingest version</button>
+          </form>
+
+          <section class="registry-section" aria-label="Document registry">
+            <div class="section-heading">
+              <h3>Document registry</h3>
+              <span class="meta" id="document-count">0 documents</span>
+            </div>
+            <div class="registry" id="documents" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <section class="tool-view" id="snapshot-tab" hidden>
+          <form class="tool-form" id="snapshot-form">
+            <label for="snapshot-id">
+              <span>Snapshot ID</span>
+              <input id="snapshot-id" name="snapshot_id" autocomplete="off" required />
+            </label>
+            <p class="note">Snapshot builds may use embedding/model API credits.</p>
+            <button type="submit">Build latest snapshot</button>
+          </form>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
