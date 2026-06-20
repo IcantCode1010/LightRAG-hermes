@@ -524,6 +524,109 @@ def test_chat_document_availability_searches_registry_not_lightrag(tmp_path):
     assert "not in the active snapshot" in text
 
 
+def test_chat_explicit_unsearchable_document_request_does_not_query_lightrag(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "should not be used"}
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "boeing-b737-700-800-900-operations-manual",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": False}],
+                }
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "blocked",
+            "reason": "Rotate or archive snapshot target storage before building.",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-002",
+                "latest_versions": {},
+            },
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post(
+        "/api/chat", json={"message": "Summarize the Boeing operations manual"}
+    )
+
+    assert response.status_code == 200
+    text = response.json()["text"]
+    assert calls == []
+    assert "boeing-b737-700-800-900-operations-manual@2026-06-20-001" in text
+    assert "not in the active snapshot" in text
+    assert "build the latest snapshot" in text
+
+
+def test_chat_explicit_searchable_document_request_scopes_prompt_to_match(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "boeing summary"}
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "boeing-b737-700-800-900-operations-manual",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+                {
+                    "document_key": "airbus-maintenance-training-student-book",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                },
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "ready",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-002",
+                "latest_versions": {
+                    "boeing-b737-700-800-900-operations-manual": "2026-06-20-001",
+                    "airbus-maintenance-training-student-book": "2026-06-20-001",
+                },
+            },
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post(
+        "/api/chat", json={"message": "Summarize the Boeing operations manual"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "ok", "text": "boeing summary"}
+    assert len(calls) == 1
+    assert "query_latest_documents" in calls[0]
+    assert _decode_prompt_payload(calls[0]) == {
+        "query": "Summarize the Boeing operations manual",
+        "document_keys": ["boeing-b737-700-800-900-operations-manual"],
+    }
+
+
 def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_path):
     calls = []
 
@@ -698,7 +801,9 @@ def test_chat_sanitizes_missing_active_snapshot_tool_output(tmp_path):
         tmp_path, hermes_runner=hermes_runner, document_reader=document_reader
     )
 
-    response = client.post("/api/chat", json={"message": "Summarize policy"})
+    response = client.post(
+        "/api/chat", json={"message": "Summarize all indexed content"}
+    )
 
     assert response.status_code == 200
     assert response.json() == {

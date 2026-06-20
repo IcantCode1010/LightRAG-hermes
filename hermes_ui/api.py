@@ -138,9 +138,20 @@ def create_app(
                 documents,
                 snapshot,
             )
+        explicit_document_route = _resolve_explicit_document_route(
+            request.message,
+            documents,
+            snapshot,
+        )
+        if explicit_document_route and not request.document_keys:
+            if explicit_document_route["state"] == "unsearchable":
+                return _build_unsearchable_document_response(explicit_document_route)
+            request_document_keys = [str(explicit_document_route["document_key"])]
+        else:
+            request_document_keys = request.document_keys
         prompt = _build_chat_prompt(
             request.message,
-            request.document_keys,
+            request_document_keys,
             has_indexed_documents=bool(documents.get("documents")),
             soul=_read_soul(settings),
             document_state=_build_document_state_digest(documents, snapshot),
@@ -406,6 +417,32 @@ _DOCUMENT_AVAILABILITY_STOPWORDS = {
     "you",
 }
 
+_DOCUMENT_SELECTION_STOPWORDS = _DOCUMENT_AVAILABILITY_STOPWORDS | {
+    "about",
+    "answer",
+    "brief",
+    "compare",
+    "explain",
+    "from",
+    "give",
+    "latest",
+    "me",
+    "of",
+    "on",
+    "please",
+    "question",
+    "summarise",
+    "summarize",
+    "summary",
+    "tell",
+    "this",
+    "to",
+    "using",
+    "version",
+    "what",
+    "with",
+}
+
 
 def _is_document_availability_question(message: str) -> bool:
     return bool(_DOCUMENT_AVAILABILITY_PATTERN.search(message))
@@ -518,6 +555,94 @@ def _build_document_availability_response(
         lines.append(f"- ...and {len(matches) - 10} more matches")
 
     return {"state": "ok", "text": "\n".join(lines)}
+
+
+def _resolve_explicit_document_route(
+    message: str,
+    documents: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not _looks_document_related(message):
+        return None
+
+    records = documents.get("documents")
+    if not isinstance(records, list) or not records:
+        return None
+
+    terms = [
+        term
+        for term in re.split(r"[^a-z0-9]+", message.lower())
+        if term and term not in _DOCUMENT_SELECTION_STOPWORDS
+    ]
+    if not terms:
+        return None
+
+    matches: list[tuple[int, dict[str, Any]]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        key = str(record.get("document_key") or "")
+        latest = str(record.get("latest_version_label") or "")
+        version_names = " ".join(
+            str(version.get("source_name") or version.get("label") or "")
+            for version in record.get("versions") or []
+            if isinstance(version, dict)
+        )
+        haystack = " ".join([key, latest, version_names]).lower().replace("-", " ")
+        matched_terms = [term for term in terms if term in haystack]
+        if matched_terms and len(matched_terms) == len(terms):
+            matches.append((len(matched_terms), record))
+
+    if len(matches) != 1:
+        return None
+
+    record = matches[0][1]
+    key = str(record.get("document_key") or "")
+    latest = str(record.get("latest_version_label") or "")
+    if not key or not latest:
+        return None
+
+    active_versions = _active_snapshot_versions(snapshot)
+    searchable = active_versions.get(key) == latest
+    return {
+        "state": "searchable" if searchable else "unsearchable",
+        "document_key": key,
+        "latest_version_label": latest,
+        "active_snapshot_id": _active_snapshot_id(snapshot),
+        "snapshot_reason": str(snapshot.get("reason") or "")
+        if isinstance(snapshot, dict)
+        else "",
+    }
+
+
+def _build_unsearchable_document_response(route: dict[str, Any]) -> dict[str, Any]:
+    source = f"{route['document_key']}@{route['latest_version_label']}"
+    lines = [
+        f"I found {source}, but it is not in the active snapshot.",
+        "Please build the latest snapshot before asking content questions about that document.",
+    ]
+    active_snapshot_id = route.get("active_snapshot_id")
+    if active_snapshot_id:
+        lines.append(f"Active snapshot: {active_snapshot_id}")
+    reason = route.get("snapshot_reason")
+    if reason:
+        lines.append(f"Snapshot status: {reason}")
+    return {"state": "ok", "text": "\n".join(lines)}
+
+
+def _active_snapshot_versions(snapshot: dict[str, Any]) -> dict[str, str]:
+    active = snapshot.get("active_snapshot") if isinstance(snapshot, dict) else None
+    versions = active.get("latest_versions") if isinstance(active, dict) else {}
+    if not isinstance(versions, dict):
+        return {}
+    return {str(key): str(value) for key, value in versions.items()}
+
+
+def _active_snapshot_id(snapshot: dict[str, Any]) -> str:
+    active = snapshot.get("active_snapshot") if isinstance(snapshot, dict) else None
+    if not isinstance(active, dict):
+        return ""
+    return str(active.get("snapshot_id") or "")
 
 
 def _normalize_chat_response(response: dict[str, Any]) -> dict[str, Any]:
