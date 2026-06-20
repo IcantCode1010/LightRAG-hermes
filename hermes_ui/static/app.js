@@ -9,6 +9,7 @@ const state = {
 };
 
 const elements = {
+  chatPanel: document.querySelector(".chat-panel"),
   status: document.querySelector("#status"),
   documents: document.querySelector("#documents"),
   documentCount: document.querySelector("#document-count"),
@@ -455,7 +456,15 @@ function setChatActivity(isActive) {
 function scrollMessagesToBottom() {
   requestAnimationFrame(() => {
     elements.messages.scrollTop = elements.messages.scrollHeight;
+    scrollChatPanelToBottom();
   });
+}
+
+function scrollChatPanelToBottom() {
+  if (!elements.chatPanel) {
+    return;
+  }
+  elements.chatPanel.scrollIntoView({ block: "end", inline: "nearest" });
 }
 
 function updateChatActivityText() {

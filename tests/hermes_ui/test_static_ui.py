@@ -57,3 +57,5 @@ def test_chat_flow_exposes_activity_indicator_and_scheduled_scroll() -> None:
     assert "chatActivityTimer" in js
     assert "updateChatActivityText" in js
     assert "Hermes is still working" in js
+    assert "scrollChatPanelToBottom" in js
+    assert "elements.chatPanel.scrollIntoView" in js
