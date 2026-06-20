@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from collections.abc import Awaitable, Callable
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -204,12 +205,17 @@ def _build_chat_prompt(
 
 The user selected specific documents. Answer from only the latest searchable
 versions for those selected document keys."""
-    elif has_indexed_documents:
+    elif has_indexed_documents and _looks_document_related(message):
         tool_name = "query_latest_all"
         field_names = "query"
         instruction = f"""Answer the user directly when the question is general.
 
 Use the lightrag-hermes MCP tool {tool_name} only when the user asks about indexed documents or needs an answer grounded in the latest document snapshot."""
+    elif has_indexed_documents:
+        field_names = "query"
+        instruction = """Answer the user directly.
+
+Do not call LightRAG document query tools for this message."""
     else:
         field_names = "query"
         instruction = """Answer the user directly.
@@ -251,6 +257,21 @@ def _soul_block(soul: str) -> str:
 </agent_soul>
 
 """
+
+
+_DOCUMENT_RELATED_PATTERN = re.compile(
+    r"\b("
+    r"document|documents|doc|docs|file|files|pdf|indexed|index|snapshot|"
+    r"source|sources|cite|citation|citations|summarize|summary|compare|"
+    r"extract|find|search|lookup|look up|according to|based on|what changed|"
+    r"policy|manual|report|contract|version"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_document_related(message: str) -> bool:
+    return bool(_DOCUMENT_RELATED_PATTERN.search(message))
 
 
 def _normalize_chat_response(response: dict[str, Any]) -> dict[str, Any]:

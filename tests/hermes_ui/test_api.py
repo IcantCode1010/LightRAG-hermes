@@ -317,6 +317,38 @@ def test_chat_no_selected_docs_can_choose_latest_all_when_docs_exist(tmp_path):
     assert _decode_prompt_payload(calls[0]) == {"query": "What changed?"}
 
 
+def test_chat_greeting_does_not_offer_document_tools_when_docs_exist(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "Hello. How can I help?"}
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "policy",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [],
+                }
+            ]
+        }
+
+    client = _client(
+        tmp_path, hermes_runner=hermes_runner, document_reader=document_reader
+    )
+
+    response = client.post("/api/chat", json={"message": "hi"})
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "ok", "text": "Hello. How can I help?"}
+    assert "Answer the user directly" in calls[0]
+    assert "query_latest_all" not in calls[0]
+    assert "query_latest_documents" not in calls[0]
+    assert _decode_prompt_payload(calls[0]) == {"query": "hi"}
+
+
 def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_path):
     calls = []
 
