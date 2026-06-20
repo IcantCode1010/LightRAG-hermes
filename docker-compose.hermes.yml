@@ -74,6 +74,32 @@ services:
       - hermes-net
     restart: unless-stopped
 
+  hermes-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.hermes-ui
+    image: lightrag-hermes-ui:local
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${HERMES_UI_HOST_BIND:-127.0.0.1}:${HERMES_UI_PORT:-8787}:8787"
+    volumes:
+      - ./data/hermes_ui_home:/app/hermes_home
+    environment:
+      HERMES_HOME: "/app/hermes_home"
+      HERMES_UI_HOST: "0.0.0.0"
+      HERMES_UI_PORT: "8787"
+      HERMES_MODEL: "${HERMES_MODEL:-gpt-5.4-mini}"
+      HERMES_PROVIDER: "openai-api"
+      HERMES_BASE_URL: "https://api.openai.com/v1"
+      LIGHTRAG_MCP_URL: "http://lightrag-mcp:8765/mcp"
+    depends_on:
+      - lightrag-mcp
+    networks:
+      - hermes-net
+    restart: unless-stopped
+
 networks:
   hermes-net:
     driver: bridge

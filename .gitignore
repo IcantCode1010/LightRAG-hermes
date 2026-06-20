@@ -57,6 +57,7 @@ inputs/
 output/
 rag_storage/
 data/
+data/hermes_ui_home/
 
 # User cumstomized prompt directory
 prompts/entity_type/

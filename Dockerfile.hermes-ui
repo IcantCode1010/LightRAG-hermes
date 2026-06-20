@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV HERMES_HOME=/app/hermes_home
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        nodejs \
+        npm \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install \
+        fastapi \
+        "uvicorn[standard]" \
+        pydantic \
+        httpx \
+        mcp \
+        PyYAML \
+        "git+https://github.com/NousResearch/hermes-agent.git"
+
+COPY hermes_ui/ ./hermes_ui/
+
+RUN mkdir -p /app/hermes_home
+
+EXPOSE 8787
+
+CMD ["uvicorn", "hermes_ui.api:app", "--host", "0.0.0.0", "--port", "8787"]
