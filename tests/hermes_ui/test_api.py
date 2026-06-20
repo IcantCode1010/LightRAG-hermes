@@ -116,6 +116,7 @@ def test_maintenance_delete_rejects_bad_confirmation(tmp_path):
 
 def test_ingest_file_calls_mcp_tool_with_base64_payload(tmp_path, monkeypatch):
     calls = []
+    pdf_payload = b"%PDF-1.4\n" + b"x" * 2048
 
     async def fake_call_tool(mcp_url, tool_name, args=None):
         calls.append((mcp_url, tool_name, args))
@@ -134,11 +135,15 @@ def test_ingest_file_calls_mcp_tool_with_base64_payload(tmp_path, monkeypatch):
             "document_key": "contract",
             "version_label": "2026-07-01-final",
         },
-        files={"file": ("contract.pdf", b"%PDF-1.4\n", "application/pdf")},
+        files={"file": ("contract.pdf", pdf_payload, "application/pdf")},
     )
 
     assert response.status_code == 200
     assert response.json()["source_name"] == "contract@2026-07-01-final.pdf"
+    assert response.json()["searchable"] is False
+    assert response.json()["next_step"] == (
+        "Build the latest snapshot to process this version."
+    )
     assert calls == [
         (
             "http://mcp.local:8765/mcp",
@@ -147,10 +152,26 @@ def test_ingest_file_calls_mcp_tool_with_base64_payload(tmp_path, monkeypatch):
                 "document_key": "contract",
                 "version_label": "2026-07-01-final",
                 "filename": "contract.pdf",
-                "content_base64": "JVBERi0xLjQK",
+                "content_base64": base64.b64encode(pdf_payload).decode("ascii"),
             },
         )
     ]
+
+
+def test_ingest_file_rejects_tiny_pdf(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post(
+        "/api/ingest-file",
+        data={
+            "document_key": "upload-check",
+            "version_label": "2026-06-20-001",
+        },
+        files={"file": ("upload-check.pdf", b"%PDF-1.4\n", "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert "PDF is too small" in response.json()["detail"]
 
 
 def _decode_prompt_payload(prompt: str) -> dict:

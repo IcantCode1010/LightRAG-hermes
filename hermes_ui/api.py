@@ -220,9 +220,8 @@ def create_app(
         content = await file.read()
         if not file.filename:
             raise HTTPException(status_code=422, detail="filename is required")
-        if not content:
-            raise HTTPException(status_code=422, detail="file cannot be empty")
-        return await call_tool(
+        _validate_upload_content(file.filename, content)
+        result = await call_tool(
             settings.mcp_url,
             "ingest_file_version",
             {
@@ -232,6 +231,11 @@ def create_app(
                 "content_base64": base64.b64encode(content).decode("ascii"),
             },
         )
+        return {
+            **result,
+            "searchable": False,
+            "next_step": "Build the latest snapshot to process this version.",
+        }
 
     @app.post("/api/snapshots/build")
     async def api_build_snapshot(request: SnapshotBuildRequest) -> dict[str, Any]:
@@ -255,6 +259,19 @@ def _ensure_hermes_configured(app: FastAPI) -> None:
     if app.state.hermes_error:
         detail = f"{detail}: {app.state.hermes_error}"
     raise HTTPException(status_code=503, detail=detail)
+
+
+def _validate_upload_content(filename: str, content: bytes) -> None:
+    if not content:
+        raise HTTPException(status_code=422, detail="file cannot be empty")
+    suffix = Path(filename).suffix.lower()
+    if not suffix:
+        raise HTTPException(status_code=422, detail="filename must include an extension")
+    if suffix == ".pdf" and len(content) < 1024:
+        raise HTTPException(
+            status_code=422,
+            detail="PDF is too small to be a usable document.",
+        )
 
 
 def _build_chat_prompt(
