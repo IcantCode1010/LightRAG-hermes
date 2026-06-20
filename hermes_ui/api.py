@@ -82,8 +82,14 @@ def create_app(
     @app.post("/api/chat")
     async def api_chat(request: ChatRequest) -> dict[str, Any]:
         _ensure_hermes_configured(app)
+        documents = await document_reader(settings.mcp_url)
+        if not documents.get("documents"):
+            return {
+                "state": "ok",
+                "text": "No documents are indexed yet. Ingest a document version first, then build a latest-version snapshot before asking document questions.",
+            }
         prompt = _build_chat_prompt(request.message, request.document_keys)
-        return await hermes_runner(prompt, settings)
+        return _normalize_chat_response(await hermes_runner(prompt, settings))
 
     @app.post("/api/ingest")
     async def api_ingest(request: IngestRequest) -> dict[str, Any]:
@@ -140,6 +146,16 @@ Call the tool with exactly these field names from the decoded payload: {field_na
 {encoded_payload}
 ```
 """
+
+
+def _normalize_chat_response(response: dict[str, Any]) -> dict[str, Any]:
+    text = str(response.get("text") or response.get("message") or "")
+    if "No active latest-version snapshot is configured" in text:
+        return {
+            "state": "ok",
+            "text": "A latest-version snapshot has not been built yet. Use the Snapshot tab to build the latest snapshot, then ask again.",
+        }
+    return response
 
 
 app = create_app()
