@@ -66,6 +66,17 @@ def test_chat_flow_exposes_activity_indicator_and_scheduled_scroll() -> None:
     assert "ConversationScrollButton" in chat_surface
 
 
+def test_chat_layout_constrains_outer_scroll_to_conversation() -> None:
+    css = (FRONTEND_SRC / "index.css").read_text(encoding="utf-8")
+
+    assert "height: 100%;" in css
+    assert "height: 100dvh;" in css
+    assert "overflow: hidden;" in css
+    assert "overscroll-behavior: contain;" in css
+    assert ".conversation-content" in css
+    assert "overflow-y: auto;" in css
+
+
 def test_hermes_frontend_declares_shadcn_chat_components() -> None:
     package_json = (FRONTEND_DIR / "package.json").read_text(encoding="utf-8")
     components_json = (FRONTEND_DIR / "components.json").read_text(encoding="utf-8")

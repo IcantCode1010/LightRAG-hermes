@@ -34,7 +34,10 @@ export function HermesChat({
     if (!content) {
       return;
     }
-    content.scrollTop = content.scrollHeight;
+    const frame = window.requestAnimationFrame(() => {
+      content.scrollTo({ top: content.scrollHeight });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [messages, isThinking]);
 
   useEffect(() => {

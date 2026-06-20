@@ -36,20 +36,19 @@ const browser = await chromium.launch(launchOptions);
 const page = await browser.newPage();
 
 try {
-  await page.setViewportSize({ width: 390, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("#chat-form");
+  await page.waitForSelector(".conversation-content");
 
   const result = await page.evaluate(async () => {
-    const messages = document.querySelector("#messages");
-    const activity = document.querySelector("#chat-activity");
-    const composer = document.querySelector("#chat-form");
-    const form = document.querySelector("#chat-form");
+    const messages = document.querySelector(".conversation-content");
+    const composer = document.querySelector(".prompt-input");
+    const form = document.querySelector(".prompt-input");
     const input = document.querySelector("#chat-message");
 
     for (let index = 0; index < 36; index += 1) {
-      const node = document.createElement("div");
-      node.className = index % 2 ? "message user" : "message agent";
+      const node = document.createElement("article");
+      node.className = index % 2 ? "message message-user" : "message message-agent";
       node.textContent = `synthetic message ${index} ${"long line ".repeat(18)}`;
       messages.append(node);
     }
@@ -61,14 +60,19 @@ try {
 
     await new Promise((resolve) => setTimeout(resolve, 350));
 
+    const activity = document.querySelector(".chat-activity");
+    const bodyScrolled = window.scrollY > 2;
+    const bodyOverflowed = document.documentElement.scrollHeight > window.innerHeight + 2;
+
     return {
-      activityHidden: activity.hidden,
-      activityBottom: activity.getBoundingClientRect().bottom,
+      bodyOverflowed,
+      bodyScrolled,
+      activityBottom: activity?.getBoundingClientRect().bottom ?? null,
       composerBottom: composer.getBoundingClientRect().bottom,
       internalMessagesAtBottom:
         messages.scrollTop >= messages.scrollHeight - messages.clientHeight - 2,
       activityVisible:
-        !activity.hidden && activity.getBoundingClientRect().bottom <= window.innerHeight + 2,
+        !!activity && activity.getBoundingClientRect().bottom <= window.innerHeight + 2,
       composerVisible: composer.getBoundingClientRect().bottom <= window.innerHeight + 2,
       messagesClientHeight: messages.clientHeight,
       messagesScrollHeight: messages.scrollHeight,
@@ -80,6 +84,8 @@ try {
   assert(result.internalMessagesAtBottom, "message list did not scroll to bottom", result);
   assert(result.activityVisible, "typing activity row was not visible", result);
   assert(result.composerVisible, "composer was not visible", result);
+  assert(!result.bodyScrolled, "window scrolled instead of conversation list", result);
+  assert(!result.bodyOverflowed, "page body overflowed instead of conversation list", result);
 
   console.log("Hermes chat scroll regression passed");
 } finally {
