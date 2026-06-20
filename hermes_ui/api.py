@@ -1,5 +1,6 @@
 from collections.abc import Awaitable, Callable
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -106,3 +107,6 @@ Call the tool with exactly these field names from the payload: {field_names}.
 {payload_json}
 ```
 """
+
+
+app = create_app(provision_hermes=bool(os.getenv("OPENAI_API_KEY")))

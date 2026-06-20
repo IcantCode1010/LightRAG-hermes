@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import pytest
 
+import hermes_ui.api
 from hermes_ui.api import create_app
 from hermes_ui.config import HermesUISettings
 
@@ -238,3 +239,10 @@ def test_provision_hermes_false_avoids_openai_api_key_requirement(
     app = create_app(settings=_settings(tmp_path), provision_hermes=False)
 
     assert app is not None
+
+
+def test_module_level_app_exists_without_openai_api_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    assert hasattr(hermes_ui.api, "app")
+    assert hermes_ui.api.app is not None
