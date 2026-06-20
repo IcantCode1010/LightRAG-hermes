@@ -98,6 +98,9 @@ def test_ensure_hermes_home_writes_openai_key_and_mcp_config(tmp_path, monkeypat
     assert mcp_server["tools"]["include"] == [
         "adapter_status",
         "list_documents",
+        "search_documents",
+        "get_document_state",
+        "list_unsearchable_latest",
         "ingest_file_version",
         "ingest_text_version",
         "query_latest_all",

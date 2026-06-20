@@ -19,6 +19,7 @@ build/
 *.tgz
 *.tar.gz
 node_modules/
+**/node_modules/
 
 # Exclude siles and folders
 *.yml

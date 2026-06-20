@@ -5,10 +5,13 @@ import pytest
 
 from lightrag_mcp.server import (
     build_adapter_status,
+    build_document_state,
     build_ingest_file_version,
     build_ingest_text_version,
     build_list_documents,
+    build_list_unsearchable_latest,
     build_snapshot_status_with_client,
+    build_search_documents,
     build_selected_document_query,
     build_latest_snapshot_with_client,
     query_latest_all_with_client,
@@ -40,6 +43,95 @@ def test_build_list_documents_marks_latest_versions(tmp_path: Path):
         "2026-06-19-review",
         "2026-07-01-final",
     ]
+
+
+def test_build_search_documents_matches_key_and_active_snapshot_state(tmp_path: Path):
+    registry = SourceRegistry(tmp_path)
+    registry.write_text_version("airbus-flight-controls", "2026-06-20-001", "A", "one")
+    registry.write_text_version("boeing-operations-manual", "2026-06-20-001", "B", "two")
+    active = ActiveSnapshot(
+        snapshot_id="snapshot-1",
+        base_url="http://snapshot-api:9621",
+        latest_versions={"airbus-flight-controls": "2026-06-20-001"},
+    )
+
+    result = build_search_documents(registry, "boeing manual", active_snapshot=active)
+
+    assert result == {
+        "query": "boeing manual",
+        "total": 1,
+        "limit": 25,
+        "offset": 0,
+        "documents": [
+            {
+                "document_key": "boeing-operations-manual",
+                "latest_version_label": "2026-06-20-001",
+                "source_name": "boeing-operations-manual@2026-06-20-001.md",
+                "searchable": False,
+                "active_snapshot_id": "snapshot-1",
+            }
+        ],
+    }
+
+
+def test_build_document_state_reports_versions_and_searchability(tmp_path: Path):
+    registry = SourceRegistry(tmp_path)
+    registry.write_text_version("handbook", "2026-06-19-review", "A", "old")
+    registry.write_text_version("handbook", "2026-07-01-final", "A", "new")
+    active = ActiveSnapshot(
+        snapshot_id="snapshot-1",
+        base_url="http://snapshot-api:9621",
+        latest_versions={"handbook": "2026-06-19-review"},
+    )
+
+    result = build_document_state(registry, "handbook", active_snapshot=active)
+
+    assert result["document_key"] == "handbook"
+    assert result["latest_version_label"] == "2026-07-01-final"
+    assert result["latest_searchable"] is False
+    assert result["active_snapshot_version_label"] == "2026-06-19-review"
+    assert result["versions"] == [
+        {
+            "label": "2026-06-19-review",
+            "source_name": "handbook@2026-06-19-review.md",
+            "searchable": True,
+        },
+        {
+            "label": "2026-07-01-final",
+            "source_name": "handbook@2026-07-01-final.md",
+            "searchable": False,
+        },
+    ]
+
+
+def test_build_list_unsearchable_latest_returns_missing_latest_versions(
+    tmp_path: Path,
+):
+    registry = SourceRegistry(tmp_path)
+    registry.write_text_version("airbus", "2026-06-20-001", "A", "one")
+    registry.write_text_version("boeing", "2026-06-20-001", "B", "two")
+    active = ActiveSnapshot(
+        snapshot_id="snapshot-1",
+        base_url="http://snapshot-api:9621",
+        latest_versions={"airbus": "2026-06-20-001"},
+    )
+
+    result = build_list_unsearchable_latest(registry, active_snapshot=active)
+
+    assert result == {
+        "total": 1,
+        "limit": 25,
+        "offset": 0,
+        "documents": [
+            {
+                "document_key": "boeing",
+                "latest_version_label": "2026-06-20-001",
+                "source_name": "boeing@2026-06-20-001.md",
+                "searchable": False,
+                "active_snapshot_id": "snapshot-1",
+            }
+        ],
+    }
 
 
 def test_build_ingest_text_version_archives_without_indexing(tmp_path: Path):

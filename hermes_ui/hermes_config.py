@@ -8,6 +8,9 @@ from hermes_ui.config import HermesUISettings
 HERMES_TOOLS = [
     "adapter_status",
     "list_documents",
+    "search_documents",
+    "get_document_state",
+    "list_unsearchable_latest",
     "ingest_file_version",
     "ingest_text_version",
     "query_latest_all",

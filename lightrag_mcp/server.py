@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -49,6 +50,124 @@ def build_list_documents(registry: SourceRegistry) -> dict[str, list[dict[str, o
             }
         )
     return {"documents": documents}
+
+
+def _source_payload(
+    source,
+    *,
+    active_snapshot: ActiveSnapshot | None,
+) -> dict[str, object]:
+    active_snapshot_id = active_snapshot.snapshot_id if active_snapshot else None
+    searchable = (
+        active_snapshot is not None
+        and active_snapshot.latest_versions.get(source.document_key)
+        == source.version_label
+    )
+    return {
+        "document_key": source.document_key,
+        "latest_version_label": source.version_label,
+        "source_name": source.source_name,
+        "searchable": searchable,
+        "active_snapshot_id": active_snapshot_id,
+    }
+
+
+def _paginate(items: list[dict[str, object]], *, limit: int, offset: int):
+    safe_limit = max(1, min(int(limit), 100))
+    safe_offset = max(0, int(offset))
+    return safe_limit, safe_offset, items[safe_offset : safe_offset + safe_limit]
+
+
+def _query_terms(query: str) -> list[str]:
+    return [term for term in re.split(r"[^a-z0-9]+", query.lower()) if term]
+
+
+def build_search_documents(
+    registry: SourceRegistry,
+    query: str,
+    *,
+    active_snapshot: ActiveSnapshot | None = None,
+    limit: int = 25,
+    offset: int = 0,
+) -> dict[str, object]:
+    latest = registry.latest_sources()
+    terms = _query_terms(query)
+    matches = []
+    for key in sorted(latest):
+        source = latest[key]
+        haystack = f"{source.document_key} {source.source_name}".lower()
+        if not terms or all(term in haystack for term in terms):
+            matches.append(_source_payload(source, active_snapshot=active_snapshot))
+
+    safe_limit, safe_offset, page = _paginate(matches, limit=limit, offset=offset)
+    return {
+        "query": query,
+        "total": len(matches),
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "documents": page,
+    }
+
+
+def build_document_state(
+    registry: SourceRegistry,
+    document_key: str,
+    *,
+    active_snapshot: ActiveSnapshot | None = None,
+) -> dict[str, object]:
+    key = validate_document_key(document_key)
+    sources = [
+        source for source in registry.list_sources() if source.document_key == key
+    ]
+    if not sources:
+        raise ValueError(f"Unknown document_key: {key}")
+
+    sources = sorted(sources, key=lambda source: source.version_label)
+    latest = sources[-1]
+    active_version = (
+        active_snapshot.latest_versions.get(key) if active_snapshot is not None else None
+    )
+    return {
+        "document_key": key,
+        "latest_version_label": latest.version_label,
+        "latest_searchable": active_version == latest.version_label,
+        "active_snapshot_id": active_snapshot.snapshot_id if active_snapshot else None,
+        "active_snapshot_version_label": active_version,
+        "versions": [
+            {
+                "label": source.version_label,
+                "source_name": source.source_name,
+                "searchable": active_version == source.version_label,
+            }
+            for source in sources
+        ],
+    }
+
+
+def build_list_unsearchable_latest(
+    registry: SourceRegistry,
+    *,
+    active_snapshot: ActiveSnapshot | None = None,
+    limit: int = 25,
+    offset: int = 0,
+) -> dict[str, object]:
+    latest = registry.latest_sources()
+    missing = []
+    for key in sorted(latest):
+        source = latest[key]
+        if (
+            active_snapshot is None
+            or active_snapshot.latest_versions.get(key) != source.version_label
+        ):
+            missing.append(_source_payload(source, active_snapshot=active_snapshot))
+
+    safe_limit, safe_offset, page = _paginate(missing, limit=limit, offset=offset)
+    return {
+        "total": len(missing),
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "documents": page,
+    }
 
 
 def build_ingest_text_version(
@@ -228,6 +347,43 @@ def adapter_status() -> dict[str, str]:
 def list_documents() -> dict[str, list[dict[str, object]]]:
     """List known document keys and their stored version labels."""
     return build_list_documents(SourceRegistry(config.source_dir))
+
+
+@mcp.tool()
+def search_documents(
+    query: str,
+    limit: int = 25,
+    offset: int = 0,
+) -> dict[str, object]:
+    """Search registered latest document metadata without reading document contents."""
+    return build_search_documents(
+        SourceRegistry(config.source_dir),
+        query,
+        active_snapshot=read_active_snapshot(config.active_snapshot_file),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@mcp.tool()
+def get_document_state(document_key: str) -> dict[str, object]:
+    """Return versions and active-snapshot searchability for one document key."""
+    return build_document_state(
+        SourceRegistry(config.source_dir),
+        document_key,
+        active_snapshot=read_active_snapshot(config.active_snapshot_file),
+    )
+
+
+@mcp.tool()
+def list_unsearchable_latest(limit: int = 25, offset: int = 0) -> dict[str, object]:
+    """List latest registered document versions missing from the active snapshot."""
+    return build_list_unsearchable_latest(
+        SourceRegistry(config.source_dir),
+        active_snapshot=read_active_snapshot(config.active_snapshot_file),
+        limit=limit,
+        offset=offset,
+    )
 
 
 @mcp.tool()

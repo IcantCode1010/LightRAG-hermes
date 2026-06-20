@@ -317,6 +317,68 @@ def test_chat_no_selected_docs_can_choose_latest_all_when_docs_exist(tmp_path):
     assert _decode_prompt_payload(calls[0]) == {"query": "What changed?"}
 
 
+def test_chat_prompt_includes_compact_document_state_digest(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "answer"}
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "airbus",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [],
+                },
+                {
+                    "document_key": "boeing",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [],
+                },
+                {
+                    "document_key": "upload-check",
+                    "latest_version_label": "2026-06-19-001",
+                    "versions": [],
+                },
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "blocked",
+            "reason": "Rotate or archive snapshot target storage before building.",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-002",
+                "latest_versions": {
+                    "airbus": "2026-06-20-001",
+                    "upload-check": "2026-06-19-001",
+                },
+            },
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post("/api/chat", json={"message": "Summarize the docs"})
+
+    assert response.status_code == 200
+    prompt = calls[0]
+    assert "<document_state>" in prompt
+    assert "registered_document_keys: 3" in prompt
+    assert "searchable_latest_documents: 2" in prompt
+    assert "unsearchable_latest_documents: 1" in prompt
+    assert "active_snapshot: snapshot-2026-06-20.openai-002" in prompt
+    assert "snapshot_state: blocked" in prompt
+    assert "Use metadata discovery tools when the user asks which documents exist" in prompt
+    assert "boeing" not in prompt
+
+
 def test_chat_greeting_does_not_offer_document_tools_when_docs_exist(tmp_path):
     calls = []
 
@@ -413,6 +475,53 @@ def test_chat_document_inventory_uses_registry_not_snapshot_query(tmp_path):
     assert "Active snapshot: snapshot-2026-06-20.openai-002" in text
     assert "Missing from the active snapshot" in text
     assert "boeing@2026-06-20-001" in text
+
+
+def test_chat_document_availability_searches_registry_not_lightrag(tmp_path):
+    calls = []
+
+    async def hermes_runner(prompt, settings):
+        calls.append(prompt)
+        return {"state": "ok", "text": "should not be used"}
+
+    async def document_reader(mcp_url):
+        return {
+            "documents": [
+                {
+                    "document_key": "boeing-b737-700-800-900-operations-manual",
+                    "latest_version_label": "2026-06-20-001",
+                    "versions": [{"label": "2026-06-20-001", "searchable": True}],
+                }
+            ]
+        }
+
+    async def snapshot_reader(mcp_url):
+        return {
+            "state": "blocked",
+            "reason": "Rotate or archive snapshot target storage before building.",
+            "active_snapshot": {
+                "snapshot_id": "snapshot-2026-06-20.openai-002",
+                "latest_versions": {},
+            },
+        }
+
+    client = _client(
+        tmp_path,
+        hermes_runner=hermes_runner,
+        document_reader=document_reader,
+        snapshot_reader=snapshot_reader,
+    )
+
+    response = client.post(
+        "/api/chat", json={"message": "Do you have the Boeing manual?"}
+    )
+
+    assert response.status_code == 200
+    text = response.json()["text"]
+    assert calls == []
+    assert "I found 1 registered document matching" in text
+    assert "boeing-b737-700-800-900-operations-manual@2026-06-20-001" in text
+    assert "not in the active snapshot" in text
 
 
 def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_path):
