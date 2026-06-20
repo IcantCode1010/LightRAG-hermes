@@ -87,6 +87,7 @@ services:
     volumes:
       - ./data/hermes_ui_home:/app/hermes_home
     environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       HERMES_HOME: "/app/hermes_home"
       HERMES_UI_HOST: "0.0.0.0"
       HERMES_UI_PORT: "8787"
