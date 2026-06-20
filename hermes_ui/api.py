@@ -149,12 +149,41 @@ def create_app(
             request_document_keys = [str(explicit_document_route["document_key"])]
         else:
             request_document_keys = request.document_keys
+        has_indexed_documents = bool(documents.get("documents"))
+        document_related = _message_matches_document_context(
+            request.message,
+            documents,
+        )
+        if request_document_keys:
+            return _normalize_chat_response(
+                _normalize_lightrag_query_response(
+                    await call_tool(
+                        settings.mcp_url,
+                        "query_latest_documents",
+                        {
+                            "question": request.message,
+                            "document_keys": request_document_keys,
+                        },
+                    )
+                )
+            )
+        if has_indexed_documents and document_related:
+            return _normalize_chat_response(
+                _normalize_lightrag_query_response(
+                    await call_tool(
+                        settings.mcp_url,
+                        "query_latest_all",
+                        {"question": request.message},
+                    )
+                )
+            )
         prompt = _build_chat_prompt(
             request.message,
             request_document_keys,
-            has_indexed_documents=bool(documents.get("documents")),
+            has_indexed_documents=has_indexed_documents,
             soul=_read_soul(settings),
             document_state=_build_document_state_digest(documents, snapshot),
+            document_related=document_related,
         )
         return _normalize_chat_response(await hermes_runner(prompt, settings))
 
@@ -222,6 +251,7 @@ def _build_chat_prompt(
     has_indexed_documents: bool = True,
     soul: str = "",
     document_state: str = "",
+    document_related: bool | None = None,
 ) -> str:
     payload: dict[str, Any] = {"query": message}
     if document_keys:
@@ -232,7 +262,11 @@ def _build_chat_prompt(
 
 The user selected specific documents. Answer from only the latest searchable
 versions for those selected document keys."""
-    elif has_indexed_documents and _looks_document_related(message):
+    elif has_indexed_documents and (
+        _looks_document_related(message)
+        if document_related is None
+        else document_related
+    ):
         tool_name = "query_latest_all"
         field_names = "query"
         instruction = f"""Answer the user directly when the question is general.
@@ -358,6 +392,74 @@ _DOCUMENT_RELATED_PATTERN = re.compile(
 
 def _looks_document_related(message: str) -> bool:
     return bool(_DOCUMENT_RELATED_PATTERN.search(message))
+
+
+_DOCUMENT_CONTEXT_STOPWORDS = {
+    "a",
+    "about",
+    "an",
+    "and",
+    "are",
+    "can",
+    "components",
+    "do",
+    "does",
+    "for",
+    "from",
+    "give",
+    "how",
+    "is",
+    "latest",
+    "me",
+    "of",
+    "on",
+    "primary",
+    "summarize",
+    "tell",
+    "the",
+    "to",
+    "what",
+    "which",
+    "with",
+    "you",
+}
+
+
+def _message_matches_document_context(
+    message: str,
+    documents: dict[str, Any],
+) -> bool:
+    if _looks_document_related(message):
+        return True
+
+    message_terms = _document_context_terms(message)
+    if len(message_terms) < 2:
+        return False
+
+    records = documents.get("documents")
+    if not isinstance(records, list):
+        return False
+
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        key = str(record.get("document_key") or "")
+        latest = str(record.get("latest_version_label") or "")
+        source_terms = _document_context_terms(f"{key} {latest}")
+        if len(message_terms & source_terms) >= 2:
+            return True
+    return False
+
+
+def _document_context_terms(text: str) -> set[str]:
+    terms = set()
+    for raw_term in re.split(r"[^a-z0-9]+", text.lower()):
+        if not raw_term or raw_term in _DOCUMENT_CONTEXT_STOPWORDS:
+            continue
+        term = raw_term[:-1] if raw_term.endswith("s") and len(raw_term) > 3 else raw_term
+        if term and term not in _DOCUMENT_CONTEXT_STOPWORDS:
+            terms.add(term)
+    return terms
 
 
 _DOCUMENT_INVENTORY_PATTERN = re.compile(
@@ -653,6 +755,25 @@ def _normalize_chat_response(response: dict[str, Any]) -> dict[str, Any]:
             "text": "A latest-version snapshot has not been built yet. Use the Snapshot tab to build the latest snapshot, then ask again.",
         }
     return response
+
+
+def _normalize_lightrag_query_response(response: dict[str, Any]) -> dict[str, Any]:
+    text = str(
+        response.get("text")
+        or response.get("response")
+        or response.get("message")
+        or ""
+    ).strip()
+    if not text:
+        text = "LightRAG returned an empty response."
+
+    normalized: dict[str, Any] = {
+        "state": str(response.get("state") or "ok"),
+        "text": text,
+    }
+    if "references" in response:
+        normalized["references"] = response["references"]
+    return normalized
 
 
 app = create_app()
