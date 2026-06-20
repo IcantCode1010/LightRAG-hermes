@@ -38,6 +38,33 @@ def test_snapshot_service_is_internal_and_has_dedicated_storage():
     )
 
 
+def test_lightrag_services_use_openai_embeddings_from_shared_env():
+    compose = yaml.safe_load(Path("docker-compose.hermes.yml").read_text())
+
+    for service_name in ("lightrag-api", "lightrag-snapshot"):
+        environment = compose["services"][service_name]["environment"]
+
+        assert environment["OPENAI_API_KEY"] == "${OPENAI_API_KEY:-}"
+        assert environment["LLM_BINDING"] == "${LLM_BINDING:-openai}"
+        assert environment["LLM_BINDING_API_KEY"] == "${OPENAI_API_KEY:-}"
+        assert environment["LLM_MODEL"] == "${LIGHTRAG_LLM_MODEL:-gpt-4o-mini}"
+        assert environment["EXTRACT_LLM_MODEL"] == (
+            "${LIGHTRAG_EXTRACT_LLM_MODEL:-gpt-4o-mini}"
+        )
+        assert environment["KEYWORD_LLM_MODEL"] == (
+            "${LIGHTRAG_KEYWORD_LLM_MODEL:-gpt-4o-mini}"
+        )
+        assert environment["QUERY_LLM_MODEL"] == (
+            "${LIGHTRAG_QUERY_LLM_MODEL:-gpt-4o-mini}"
+        )
+        assert environment["EMBEDDING_BINDING"] == "${EMBEDDING_BINDING:-openai}"
+        assert environment["EMBEDDING_BINDING_API_KEY"] == "${OPENAI_API_KEY:-}"
+        assert environment["EMBEDDING_MODEL"] == (
+            "${EMBEDDING_MODEL:-text-embedding-3-large}"
+        )
+        assert environment["EMBEDDING_DIM"] == "${EMBEDDING_DIM:-3072}"
+
+
 def test_hermes_ui_mounts_only_snapshot_archive_for_maintenance():
     compose = yaml.safe_load(Path("docker-compose.hermes.yml").read_text())
     service = compose["services"]["hermes-ui"]
