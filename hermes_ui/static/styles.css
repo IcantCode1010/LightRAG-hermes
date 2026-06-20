@@ -170,6 +170,15 @@ h3 {
   background: var(--panel-alt);
 }
 
+.danger-button {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #8f1d14;
+}
+
 .status-stack,
 .registry,
 .messages {
@@ -252,7 +261,7 @@ h3 {
 
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 16px;
 }
@@ -322,6 +331,13 @@ label {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.archive-delete {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
 }
 
 .pill {

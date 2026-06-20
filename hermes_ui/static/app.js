@@ -1,5 +1,6 @@
 const state = {
   documents: [],
+  archives: [],
   pending: Object.create(null),
   selectedFile: null,
   snapshotCanBuild: false,
@@ -9,6 +10,8 @@ const elements = {
   status: document.querySelector("#status"),
   documents: document.querySelector("#documents"),
   documentCount: document.querySelector("#document-count"),
+  snapshotArchives: document.querySelector("#snapshot-archives"),
+  archiveCount: document.querySelector("#archive-count"),
   messages: document.querySelector("#messages"),
   refresh: document.querySelector("#refresh"),
   chatForm: document.querySelector("#chat-form"),
@@ -38,21 +41,25 @@ elements.snapshotId.value = `snapshot-${datePart()}.001`;
 
 renderStatus();
 renderDocuments();
+renderSnapshotArchives();
 renderSnapshotStatus();
 addMessage("system", "Ready. Status and document registry are loading.");
 refresh().catch((error) => addMessage("system", formatError(error)));
 
 async function refresh() {
   return withPending("refresh", [elements.refresh], async () => {
-    const [status, docs, snapshot] = await Promise.all([
+    const [status, docs, snapshot, archives] = await Promise.all([
       api("/api/status"),
       api("/api/documents"),
       api("/api/snapshots/status"),
+      api("/api/maintenance/snapshot-archives"),
     ]);
     renderStatus(status);
     renderSnapshotStatus(snapshot);
     state.documents = Array.isArray(docs.documents) ? docs.documents : [];
+    state.archives = Array.isArray(archives.archives) ? archives.archives : [];
     renderDocuments();
+    renderSnapshotArchives();
   });
 }
 
@@ -286,6 +293,74 @@ function renderDocuments() {
   elements.documents.replaceChildren(...rows);
 }
 
+function renderSnapshotArchives() {
+  if (!elements.snapshotArchives || !elements.archiveCount) {
+    return;
+  }
+
+  const count = state.archives.length;
+  elements.archiveCount.textContent = `${count} ${count === 1 ? "archive" : "archives"}`;
+
+  if (count === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No archived snapshots are available for cleanup.";
+    elements.snapshotArchives.replaceChildren(empty);
+    return;
+  }
+
+  const rows = state.archives.map((archive) => {
+    const row = document.createElement("article");
+    row.className = "doc-row archive-row";
+
+    const header = document.createElement("div");
+    header.className = "doc-row-header";
+
+    const name = document.createElement("div");
+    name.className = "doc-key";
+    name.textContent = archive.name || "unknown";
+
+    const size = document.createElement("span");
+    size.className = "pill";
+    size.textContent = formatBytes(Number(archive.size_bytes || 0));
+
+    header.append(name, size);
+
+    const controls = document.createElement("div");
+    controls.className = "archive-delete";
+
+    const label = document.createElement("label");
+    const labelText = document.createElement("span");
+    labelText.textContent = "Type archive name to delete";
+    const input = document.createElement("input");
+    input.name = "confirmation";
+    input.autocomplete = "off";
+    input.placeholder = archive.name || "";
+    label.append(labelText, input);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "danger-button";
+    button.textContent = "Delete archive";
+    button.disabled = true;
+
+    input.addEventListener("input", () => {
+      button.disabled = input.value.trim() !== archive.name;
+    });
+    button.addEventListener("click", () => {
+      deleteSnapshotArchive(archive.name, input.value.trim()).catch((error) => {
+        addMessage("system", formatError(error));
+      });
+    });
+
+    controls.append(label, button);
+    row.append(header, controls);
+    return row;
+  });
+
+  elements.snapshotArchives.replaceChildren(...rows);
+}
+
 function renderSnapshotStatus(snapshot = null) {
   if (!elements.snapshotStatus) {
     return;
@@ -353,6 +428,21 @@ function selectTab(tabName) {
 
   document.querySelector("#documents-tab").hidden = tabName !== "documents";
   document.querySelector("#snapshot-tab").hidden = tabName !== "snapshot";
+  document.querySelector("#maintenance-tab").hidden = tabName !== "maintenance";
+}
+
+async function deleteSnapshotArchive(archiveName, confirmation) {
+  await withPending("archive-delete", [], async () => {
+    const response = await api(
+      `/api/maintenance/snapshot-archives/${encodeURIComponent(archiveName)}`,
+      {
+        method: "DELETE",
+        body: { confirmation },
+      },
+    );
+    addMessage("system", responseText(response, "Snapshot archive deleted."));
+    await refresh();
+  });
 }
 
 async function withPending(key, buttons, task) {
@@ -487,6 +577,20 @@ function nextPatchLabel(label) {
 
   const next = String(Number(match[2]) + 1).padStart(3, "0");
   return `${match[1]}-${next}`;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function isObject(value) {

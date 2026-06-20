@@ -86,6 +86,7 @@ services:
       - "${HERMES_UI_HOST_BIND:-127.0.0.1}:${HERMES_UI_PORT:-8787}:8787"
     volumes:
       - ./data/hermes_ui_home:/app/hermes_home
+      - ./data/hermes_snapshot_archive:/app/data/hermes_snapshot_archive
     environment:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       HERMES_HOME: "/app/hermes_home"
@@ -96,6 +97,7 @@ services:
       HERMES_BASE_URL: "https://api.openai.com/v1"
       HERMES_SOUL_FILE: "${HERMES_SOUL_FILE:-/app/hermes_ui/soul.md}"
       LIGHTRAG_MCP_URL: "http://lightrag-mcp:8765/mcp"
+      HERMES_SNAPSHOT_ARCHIVE_DIR: "/app/data/hermes_snapshot_archive"
     depends_on:
       - lightrag-mcp
     networks:

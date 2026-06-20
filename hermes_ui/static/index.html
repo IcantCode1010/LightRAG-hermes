@@ -60,6 +60,15 @@
             aria-controls="snapshot-tab"
             aria-selected="false"
           >Snapshot</button>
+          <button
+            class="tab"
+            id="maintenance-tab-button"
+            data-tab="maintenance"
+            type="button"
+            role="tab"
+            aria-controls="maintenance-tab"
+            aria-selected="false"
+          >Maintenance</button>
         </nav>
 
         <section
@@ -134,6 +143,26 @@
             <p class="note">Snapshot builds may use embedding/model API credits.</p>
             <button type="submit">Build latest snapshot</button>
           </form>
+        </section>
+
+        <section
+          class="tool-view"
+          id="maintenance-tab"
+          role="tabpanel"
+          aria-labelledby="maintenance-tab-button"
+          hidden
+        >
+          <section class="registry-section" aria-label="Snapshot archive maintenance">
+            <div class="section-heading">
+              <h3>Archived snapshots</h3>
+              <span class="meta" id="archive-count">0 archives</span>
+            </div>
+            <p class="note">
+              Deletes archived snapshot folders only. Active snapshots and source
+              document versions are not available here.
+            </p>
+            <div class="registry archive-registry" id="snapshot-archives" aria-live="polite"></div>
+          </section>
         </section>
       </aside>
     </main>

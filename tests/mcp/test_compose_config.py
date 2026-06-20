@@ -36,3 +36,21 @@ def test_snapshot_service_is_internal_and_has_dedicated_storage():
     assert "./data/hermes_snapshot/rag_storage:/app/data/snapshot_rag_storage" in (
         service["volumes"]
     )
+
+
+def test_hermes_ui_mounts_only_snapshot_archive_for_maintenance():
+    compose = yaml.safe_load(Path("docker-compose.hermes.yml").read_text())
+    service = compose["services"]["hermes-ui"]
+
+    assert service["environment"]["HERMES_SNAPSHOT_ARCHIVE_DIR"] == (
+        "/app/data/hermes_snapshot_archive"
+    )
+    assert (
+        "./data/hermes_snapshot_archive:/app/data/hermes_snapshot_archive"
+        in service["volumes"]
+    )
+    assert not any(
+        volume.startswith("./data/hermes_snapshot:")
+        or volume.startswith("./data/hermes_sources:")
+        for volume in service["volumes"]
+    )

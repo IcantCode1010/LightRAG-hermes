@@ -49,6 +49,12 @@ class HermesUISettings:
     soul_file: Path = field(
         default_factory=lambda: _env_path("HERMES_SOUL_FILE", _default_soul_file())
     )
+    snapshot_archive_dir: Path = field(
+        default_factory=lambda: _env_path(
+            "HERMES_SNAPSHOT_ARCHIVE_DIR",
+            Path("/app/data/hermes_snapshot_archive"),
+        )
+    )
     hermes_timeout_seconds: int = field(
         default_factory=lambda: _env_int("HERMES_UI_HERMES_TIMEOUT", 120)
     )

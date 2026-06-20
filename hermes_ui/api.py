@@ -23,6 +23,10 @@ from hermes_ui.mcp_client import (
     get_snapshot_status,
     get_status,
 )
+from hermes_ui.snapshot_archives import (
+    delete_snapshot_archive,
+    list_snapshot_archives,
+)
 
 
 HermesRunner = Callable[[str, HermesUISettings], Awaitable[dict[str, Any]]]
@@ -45,6 +49,10 @@ class IngestRequest(BaseModel):
 
 class SnapshotBuildRequest(BaseModel):
     snapshot_id: str = Field(min_length=1)
+
+
+class SnapshotArchiveDeleteRequest(BaseModel):
+    confirmation: str = Field(min_length=1)
 
 
 def create_app(
@@ -90,6 +98,26 @@ def create_app(
     @app.get("/api/snapshots/status")
     async def api_snapshot_status() -> dict[str, Any]:
         return await snapshot_reader(settings.mcp_url)
+
+    @app.get("/api/maintenance/snapshot-archives")
+    async def api_snapshot_archives() -> dict[str, Any]:
+        return list_snapshot_archives(settings.snapshot_archive_dir)
+
+    @app.delete("/api/maintenance/snapshot-archives/{archive_name}")
+    async def api_delete_snapshot_archive(
+        archive_name: str,
+        request: SnapshotArchiveDeleteRequest,
+    ) -> dict[str, Any]:
+        try:
+            return delete_snapshot_archive(
+                settings.snapshot_archive_dir,
+                archive_name,
+                confirmation=request.confirmation,
+            )
+        except FileNotFoundError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
     @app.post("/api/chat")
     async def api_chat(request: ChatRequest) -> dict[str, Any]:

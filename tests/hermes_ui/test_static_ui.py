@@ -25,3 +25,15 @@ def test_snapshot_panel_exposes_readiness_status() -> None:
     assert 'id="snapshot-status"' in html
     assert "/api/snapshots/status" in js
     assert "renderSnapshotStatus" in js
+
+
+def test_maintenance_panel_exposes_snapshot_archive_cleanup() -> None:
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'data-tab="maintenance"' in html
+    assert 'id="maintenance-tab"' in html
+    assert 'id="snapshot-archives"' in html
+    assert "/api/maintenance/snapshot-archives" in js
+    assert "deleteSnapshotArchive" in js
+    assert "confirmation" in js

@@ -55,6 +55,65 @@ def test_snapshot_status_returns_reader_json(tmp_path):
     }
 
 
+def test_maintenance_lists_snapshot_archives(tmp_path):
+    settings = _settings(tmp_path)
+    settings.snapshot_archive_dir = tmp_path / "snapshot-archive"
+    archive = settings.snapshot_archive_dir / "hermes_snapshot_20260620_010101"
+    archive.mkdir(parents=True)
+
+    app = create_app(settings=settings, provision_hermes=False)
+    client = TestClient(app)
+
+    response = client.get("/api/maintenance/snapshot-archives")
+
+    assert response.status_code == 200
+    assert response.json()["archives"][0]["name"] == (
+        "hermes_snapshot_20260620_010101"
+    )
+
+
+def test_maintenance_deletes_snapshot_archive_with_confirmation(tmp_path):
+    settings = _settings(tmp_path)
+    settings.snapshot_archive_dir = tmp_path / "snapshot-archive"
+    archive = settings.snapshot_archive_dir / "hermes_snapshot_20260620_010101"
+    archive.mkdir(parents=True)
+
+    app = create_app(settings=settings, provision_hermes=False)
+    client = TestClient(app)
+
+    response = client.request(
+        "DELETE",
+        "/api/maintenance/snapshot-archives/hermes_snapshot_20260620_010101",
+        json={"confirmation": "hermes_snapshot_20260620_010101"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "deleted",
+        "archive_name": "hermes_snapshot_20260620_010101",
+    }
+    assert not archive.exists()
+
+
+def test_maintenance_delete_rejects_bad_confirmation(tmp_path):
+    settings = _settings(tmp_path)
+    settings.snapshot_archive_dir = tmp_path / "snapshot-archive"
+    archive = settings.snapshot_archive_dir / "hermes_snapshot_20260620_010101"
+    archive.mkdir(parents=True)
+
+    app = create_app(settings=settings, provision_hermes=False)
+    client = TestClient(app)
+
+    response = client.request(
+        "DELETE",
+        "/api/maintenance/snapshot-archives/hermes_snapshot_20260620_010101",
+        json={"confirmation": "wrong"},
+    )
+
+    assert response.status_code == 400
+    assert archive.exists()
+
+
 def test_ingest_file_calls_mcp_tool_with_base64_payload(tmp_path, monkeypatch):
     calls = []
 

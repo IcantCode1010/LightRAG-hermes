@@ -74,6 +74,17 @@ Hermes UI home is stored under:
 ./data/hermes_ui_home
 ```
 
+The Maintenance tab can delete archived snapshot folders only. The UI container
+mounts the archive root at:
+
+```text
+./data/hermes_snapshot_archive
+```
+
+It does not mount `./data/hermes_snapshot` or `./data/hermes_sources`, so the
+Maintenance tab cannot delete the active latest-only snapshot or archived source
+document versions.
+
 ## Safety Boundary
 
 The MCP adapter runs in a container and talks to LightRAG over the Docker Compose
@@ -87,6 +98,9 @@ network. It mounts only these repo-local data directories:
 
 Do not mount broad home directories into the MCP container. File ingestion should
 copy specific files into the controlled source archive before indexing.
+
+The `hermes-ui` container separately mounts only
+`./data/hermes_snapshot_archive` for the Maintenance tab.
 
 ## Version Convention
 
