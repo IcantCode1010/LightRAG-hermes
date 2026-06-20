@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from hermes_ui.api import create_app
 from hermes_ui.config import HermesUISettings
@@ -124,6 +125,14 @@ def test_chat_selected_docs_uses_query_latest_documents_and_includes_keys(tmp_pa
     assert "Summarize these" in prompt
 
 
+def test_chat_rejects_empty_message(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post("/api/chat", json={"message": ""})
+
+    assert response.status_code == 422
+
+
 def test_ingest_rejects_invalid_version_label(tmp_path):
     client = _client(tmp_path)
 
@@ -136,6 +145,29 @@ def test_ingest_rejects_invalid_version_label(tmp_path):
             "text": "Body",
         },
     )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "document_key",
+        "title",
+        "text",
+    ],
+)
+def test_ingest_rejects_empty_required_text_fields(tmp_path, field):
+    client = _client(tmp_path)
+    payload = {
+        "document_key": "policy",
+        "version_label": "v2026.06.20.001",
+        "title": "Policy",
+        "text": "Body",
+    }
+    payload[field] = ""
+
+    response = client.post("/api/ingest", json=payload)
 
     assert response.status_code == 422
 
@@ -188,6 +220,14 @@ def test_snapshots_build_calls_runner_with_snapshot_prompt(tmp_path):
     prompt, _settings = calls[0]
     assert "build_latest_snapshot" in prompt
     assert "snapshot-2026-06-20" in prompt
+
+
+def test_snapshots_build_rejects_empty_snapshot_id(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.post("/api/snapshots/build", json={"snapshot_id": ""})
+
+    assert response.status_code == 422
 
 
 def test_provision_hermes_false_avoids_openai_api_key_requirement(
