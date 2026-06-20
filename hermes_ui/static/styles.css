@@ -263,6 +263,10 @@ h3 {
   animation-delay: 0.3s;
 }
 
+.chat-activity-text {
+  font-variant-numeric: tabular-nums;
+}
+
 @keyframes typingPulse {
   0%,
   80%,

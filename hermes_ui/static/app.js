@@ -4,6 +4,8 @@ const state = {
   pending: Object.create(null),
   selectedFile: null,
   snapshotCanBuild: false,
+  chatActivityStartedAt: null,
+  chatActivityTimer: null,
 };
 
 const elements = {
@@ -14,6 +16,7 @@ const elements = {
   archiveCount: document.querySelector("#archive-count"),
   messages: document.querySelector("#messages"),
   chatActivity: document.querySelector("#chat-activity"),
+  chatActivityText: document.querySelector("#chat-activity-text"),
   refresh: document.querySelector("#refresh"),
   chatForm: document.querySelector("#chat-form"),
   chatMessage: document.querySelector("#chat-message"),
@@ -429,7 +432,23 @@ function setChatActivity(isActive) {
   }
   elements.chatActivity.hidden = !isActive;
   if (isActive) {
+    if (state.chatActivityTimer) {
+      window.clearInterval(state.chatActivityTimer);
+    }
+    state.chatActivityStartedAt = Date.now();
+    updateChatActivityText();
+    state.chatActivityTimer = window.setInterval(updateChatActivityText, 1000);
     scrollMessagesToBottom();
+    return;
+  }
+
+  if (state.chatActivityTimer) {
+    window.clearInterval(state.chatActivityTimer);
+    state.chatActivityTimer = null;
+  }
+  state.chatActivityStartedAt = null;
+  if (elements.chatActivityText) {
+    elements.chatActivityText.textContent = "Hermes is thinking...";
   }
 }
 
@@ -437,6 +456,22 @@ function scrollMessagesToBottom() {
   requestAnimationFrame(() => {
     elements.messages.scrollTop = elements.messages.scrollHeight;
   });
+}
+
+function updateChatActivityText() {
+  if (!elements.chatActivityText || !state.chatActivityStartedAt) {
+    return;
+  }
+
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - state.chatActivityStartedAt) / 1000));
+  let label = "Hermes is thinking";
+  if (elapsedSeconds >= 20) {
+    label = "Hermes is still working";
+  } else if (elapsedSeconds >= 8) {
+    label = "Hermes is checking tools";
+  }
+
+  elements.chatActivityText.textContent = `${label} (${elapsedSeconds}s)`;
 }
 
 function selectTab(tabName) {

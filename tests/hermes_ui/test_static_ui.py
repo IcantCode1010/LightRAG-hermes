@@ -53,3 +53,7 @@ def test_chat_flow_exposes_activity_indicator_and_scheduled_scroll() -> None:
     assert "typing-dots" in html
     assert "typing-dot" in html
     assert "@keyframes typingPulse" in css
+    assert 'id="chat-activity-text"' in html
+    assert "chatActivityTimer" in js
+    assert "updateChatActivityText" in js
+    assert "Hermes is still working" in js
