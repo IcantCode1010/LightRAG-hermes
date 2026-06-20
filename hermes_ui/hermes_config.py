@@ -22,21 +22,34 @@ def ensure_hermes_home(settings: HermesUISettings) -> None:
         raise RuntimeError("OPENAI_API_KEY must be set before starting Hermes UI")
 
     settings.hermes_home.mkdir(parents=True, exist_ok=True)
-    (settings.hermes_home / ".env").write_text(
-        f"OPENAI_API_KEY={openai_api_key}\n",
+    env_path = settings.hermes_home / ".env"
+    env_path.write_text(
+        f"OPENAI_API_KEY={_quote_dotenv_value(openai_api_key)}\n",
         encoding="utf-8",
     )
+    _chmod_owner_only(env_path)
     (settings.hermes_home / "config.yaml").write_text(
         yaml.safe_dump(_build_config(settings), sort_keys=False),
         encoding="utf-8",
     )
 
 
+def _quote_dotenv_value(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def _chmod_owner_only(path) -> None:
+    try:
+        path.chmod(0o600)
+    except (AttributeError, NotImplementedError, OSError):
+        return
+
+
 def _build_config(settings: HermesUISettings) -> dict[str, object]:
     return {
         "model": {
             "provider": settings.hermes_provider,
-            "model": settings.hermes_model,
+            "default": settings.hermes_model,
             "base_url": settings.hermes_base_url,
         },
         "terminal": {
@@ -44,10 +57,13 @@ def _build_config(settings: HermesUISettings) -> dict[str, object]:
         },
         "mcp_servers": {
             "lightrag-hermes": {
+                "enabled": True,
                 "url": settings.mcp_url,
-                "tools": HERMES_TOOLS,
-                "resources": False,
-                "prompts": False,
+                "tools": {
+                    "include": HERMES_TOOLS,
+                    "resources": False,
+                    "prompts": False,
+                },
             },
         },
     }

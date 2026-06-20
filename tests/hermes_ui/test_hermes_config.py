@@ -1,10 +1,15 @@
 from pathlib import Path
+import tomllib
 
+from dotenv import dotenv_values
 import pytest
 import yaml
 
 from hermes_ui.config import HermesUISettings
 from hermes_ui.hermes_config import ensure_hermes_home
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_settings_defaults_are_container_safe_and_env_driven(monkeypatch):
@@ -62,23 +67,25 @@ def test_ensure_hermes_home_writes_openai_key_and_mcp_config(tmp_path, monkeypat
 
     ensure_hermes_home(settings)
 
-    assert (settings.hermes_home / ".env").read_text(encoding="utf-8") == (
-        "OPENAI_API_KEY=sk-test-key\n"
+    assert (
+        dotenv_values(settings.hermes_home / ".env")["OPENAI_API_KEY"]
+        == "sk-test-key"
     )
 
     config = yaml.safe_load(
         (settings.hermes_home / "config.yaml").read_text(encoding="utf-8")
     )
     assert config["model"]["provider"] == "openai-api"
-    assert config["model"]["model"] == "gpt-5.4-mini"
+    assert config["model"]["default"] == "gpt-5.4-mini"
     assert config["model"]["base_url"] == "https://api.openai.com/v1"
     assert config["terminal"]["backend"] == "docker"
 
     mcp_server = config["mcp_servers"]["lightrag-hermes"]
+    assert mcp_server["enabled"] is True
     assert mcp_server["url"] == "http://mcp.local:8765/mcp"
-    assert mcp_server["resources"] is False
-    assert mcp_server["prompts"] is False
-    assert mcp_server["tools"] == [
+    assert mcp_server["tools"]["resources"] is False
+    assert mcp_server["tools"]["prompts"] is False
+    assert mcp_server["tools"]["include"] == [
         "adapter_status",
         "list_documents",
         "ingest_text_version",
@@ -95,3 +102,44 @@ def test_ensure_hermes_home_requires_openai_api_key(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         ensure_hermes_home(settings)
+
+
+def test_ensure_hermes_home_quotes_openai_api_key_for_dotenv(
+    tmp_path, monkeypatch
+):
+    api_key = "sk test#value$with'quotes\"and spaces"
+    monkeypatch.setenv("OPENAI_API_KEY", api_key)
+    settings = HermesUISettings(hermes_home=tmp_path / "hermes")
+
+    ensure_hermes_home(settings)
+
+    env_path = settings.hermes_home / ".env"
+    assert dotenv_values(env_path)["OPENAI_API_KEY"] == api_key
+    assert env_path.read_text(encoding="utf-8").startswith("OPENAI_API_KEY='")
+
+
+def test_ensure_hermes_home_chmods_env_file_owner_only(tmp_path, monkeypatch):
+    chmod_calls = []
+    original_chmod = Path.chmod
+
+    def record_chmod(path, mode, *args, **kwargs):
+        chmod_calls.append((path, mode))
+        return original_chmod(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "chmod", record_chmod)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    settings = HermesUISettings(hermes_home=tmp_path / "hermes")
+
+    ensure_hermes_home(settings)
+
+    assert (settings.hermes_home / ".env", 0o600) in chmod_calls
+
+
+def test_package_discovery_includes_hermes_ui():
+    pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())
+
+    package_includes = pyproject["tool"]["setuptools"]["packages"]["find"][
+        "include"
+    ]
+
+    assert "hermes_ui*" in package_includes
