@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { ClipboardCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -57,7 +57,7 @@ function ArchiveRow({
     try {
       const response = await api<unknown>(`/api/maintenance/snapshot-archives/${encodeURIComponent(archiveName)}`, {
         method: "DELETE",
-        body: { confirmation },
+        body: { confirmation: confirmation.trim() },
       });
       addMessage("system", responseText(response, "Snapshot archive deleted."));
       await refresh();
@@ -79,15 +79,21 @@ function ArchiveRow({
           <span>Type archive name to delete</span>
           <Input placeholder={archiveName} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
         </label>
-        <Button
-          disabled={confirmation.trim() !== archiveName || isPending}
-          onClick={deleteArchive}
-          type="button"
-          variant="destructive"
-        >
-          <Trash2 size={16} />
-          Delete archive
-        </Button>
+        <div className="archive-actions">
+          <Button onClick={() => setConfirmation(archiveName)} type="button" variant="secondary">
+            <ClipboardCheck size={16} />
+            Use archive name
+          </Button>
+          <Button
+            disabled={confirmation.trim() !== archiveName || isPending}
+            onClick={deleteArchive}
+            type="button"
+            variant="destructive"
+          >
+            <Trash2 size={16} />
+            Delete archive
+          </Button>
+        </div>
       </div>
     </article>
   );

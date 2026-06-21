@@ -540,6 +540,13 @@ label {
   align-items: end;
 }
 
+.archive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -640,6 +647,10 @@ label {
   .prompt-input,
   .archive-delete {
     grid-template-columns: 1fr;
+  }
+
+  .archive-actions {
+    justify-content: stretch;
   }
 
   .panel-header,

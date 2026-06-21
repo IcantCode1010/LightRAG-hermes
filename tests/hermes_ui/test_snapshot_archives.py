@@ -63,6 +63,23 @@ def test_delete_snapshot_archive_removes_direct_child_directory(tmp_path: Path):
     assert archive_root.exists()
 
 
+def test_delete_snapshot_archive_allows_surrounding_confirmation_whitespace(
+    tmp_path: Path,
+):
+    archive_root = tmp_path / "archives"
+    target = archive_root / "hermes_snapshot_20260620_010101"
+    target.mkdir(parents=True)
+
+    result = delete_snapshot_archive(
+        archive_root,
+        "hermes_snapshot_20260620_010101",
+        confirmation=" hermes_snapshot_20260620_010101\n",
+    )
+
+    assert result["status"] == "deleted"
+    assert not target.exists()
+
+
 @pytest.mark.parametrize(
     "archive_name",
     [

@@ -61,6 +61,9 @@ def test_maintenance_panel_exposes_snapshot_archive_cleanup() -> None:
     assert "/api/maintenance/snapshot-archives" in maintenance_panel
     assert "deleteArchive" in maintenance_panel
     assert "confirmation" in maintenance_panel
+    assert "confirmation.trim()" in maintenance_panel
+    assert "body: { confirmation: confirmation.trim() }" in maintenance_panel
+    assert "Use archive name" in maintenance_panel
 
 
 def test_chat_flow_exposes_activity_indicator_and_scheduled_scroll() -> None:

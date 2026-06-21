@@ -30,7 +30,7 @@ def delete_snapshot_archive(
     confirmation: str,
 ) -> dict[str, str]:
     safe_name = _validate_archive_name(archive_name)
-    if confirmation != safe_name:
+    if str(confirmation or "").strip() != safe_name:
         raise ValueError("confirmation must match archive name")
 
     archive_root.mkdir(parents=True, exist_ok=True)
